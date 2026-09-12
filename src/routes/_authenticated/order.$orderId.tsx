@@ -104,8 +104,13 @@ function OrderScreen() {
     queryClient.invalidateQueries({ queryKey: ["open-orders"] });
   };
 
-  const addItem = useMutation({
-    mutationFn: async (menuItem: { id: string; name: string; price: number; tax_rate: number }) => {
+  async function addLine(menuItem: {
+    id: string;
+    name: string;
+    price: number;
+    tax_rate: number;
+  }) {
+    {
       // Read the current line straight from the database so rapid taps merge
       // into one line instead of creating duplicates from stale cache.
       const { data: existingRows, error: lookupError } = await supabase
