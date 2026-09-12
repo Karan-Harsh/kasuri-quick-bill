@@ -14,16 +14,268 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      menu_items: {
+        Row: {
+          category_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          price: number
+          tax_rate: number
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          price?: number
+          tax_rate?: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          price?: number
+          tax_rate?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_items: {
+        Row: {
+          created_at: string
+          id: string
+          item_name: string
+          menu_item_id: string | null
+          order_id: string
+          quantity: number
+          tax_rate: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_name: string
+          menu_item_id?: string | null
+          order_id: string
+          quantity?: number
+          tax_rate?: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_name?: string
+          menu_item_id?: string | null
+          order_id?: string
+          quantity?: number
+          tax_rate?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          bill_number: number
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          discount: number
+          id: string
+          note: string | null
+          order_type: string
+          payment_method: string | null
+          status: string
+          subtotal: number
+          table_id: string | null
+          tax_amount: number
+          total: number
+        }
+        Insert: {
+          bill_number?: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          discount?: number
+          id?: string
+          note?: string | null
+          order_type: string
+          payment_method?: string | null
+          status?: string
+          subtotal?: number
+          table_id?: string | null
+          tax_amount?: number
+          total?: number
+        }
+        Update: {
+          bill_number?: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          discount?: number
+          id?: string
+          note?: string | null
+          order_type?: string
+          payment_method?: string | null
+          status?: string
+          subtotal?: number
+          table_id?: string | null
+          tax_amount?: number
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          id: string
+          method: string
+          order_id: string
+          paid_at: string
+        }
+        Insert: {
+          amount: number
+          id?: string
+          method: string
+          order_id: string
+          paid_at?: string
+        }
+        Update: {
+          amount?: number
+          id?: string
+          method?: string
+          order_id?: string
+          paid_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      restaurant_tables: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          table_number: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          table_number: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          table_number?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_staff_role: {
+        Args: never
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "cashier"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +402,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "cashier"],
+    },
   },
 } as const
