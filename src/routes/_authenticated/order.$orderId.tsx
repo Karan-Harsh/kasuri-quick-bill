@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { computeTotals, inr, PAYMENT_METHODS, paymentLabel, type PaymentMethod } from "@/lib/kasuri";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 
 export const Route = createFileRoute("/_authenticated/order/$orderId")({
   head: () => ({
@@ -85,6 +86,8 @@ function OrderScreen() {
   const order = orderQuery.data;
   const items = itemsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
+  const { data: orgSettings } = useOrganizationSettings();
+  const gstEnabled = orgSettings?.gst_enabled ?? false;
 
   useEffect(() => {
     if (!activeCategory && categories[0]) setActiveCategory(categories[0].id);
@@ -95,8 +98,8 @@ function OrderScreen() {
   }, [order?.id]);
 
   const totals = useMemo(
-    () => computeTotals(items, Number(discountText) || 0),
-    [items, discountText],
+    () => computeTotals(items, Number(discountText) || 0, { gstEnabled }),
+    [items, discountText, gstEnabled],
   );
 
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -175,19 +178,20 @@ function OrderScreen() {
   const settle = useMutation({
     mutationFn: async () => {
       if (items.length === 0) throw new Error("Add at least one item before settling");
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "COMPLETED",
-          discount: totals.discount,
-          subtotal: totals.subtotal,
-          tax_amount: totals.taxAmount,
-          total: totals.total,
-          payment_method: method,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", orderId);
+
+      const payload = {
+        status: "COMPLETED" as const,
+        discount: totals.discount,
+        subtotal: totals.subtotal,
+        tax_amount: totals.taxAmount,
+        total: totals.total,
+        payment_method: method,
+        completed_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from("orders").update(payload).eq("id", orderId);
       if (error) throw error;
+
       const { error: payError } = await supabase
         .from("payments")
         .insert({ order_id: orderId, method, amount: totals.total });
@@ -197,7 +201,11 @@ function OrderScreen() {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
       queryClient.invalidateQueries({ queryKey: ["today-stats"] });
       toast.success("Bill settled");
-      navigate({ to: "/receipt/$orderId", params: { orderId } });
+      navigate({
+        to: "/receipt/$orderId",
+        params: { orderId },
+        search: { print: "1" },
+      });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not settle"),
   });
@@ -240,6 +248,15 @@ function OrderScreen() {
   const isSettled = order.status !== "OPEN";
   const tableLabel = order.restaurant_tables?.label;
   const visibleItems = menuQuery.data?.filter((item) => item.category_id === activeCategory) ?? [];
+  const billGstEnabled = isSettled ? Number(order.tax_amount) > 0 : gstEnabled;
+  const displayTotals = isSettled
+    ? {
+        subtotal: Number(order.subtotal),
+        discount: Number(order.discount),
+        taxAmount: Number(order.tax_amount),
+        total: Number(order.total),
+      }
+    : totals;
 
   return (
     <div className="min-h-screen bg-background">
@@ -289,7 +306,9 @@ function OrderScreen() {
               >
                 <p className="text-lg font-semibold leading-tight">{item.name}</p>
                 <p className="mt-2 text-xl font-bold text-primary">{inr(Number(item.price))}</p>
-                <p className="text-xs text-muted-foreground">GST {Number(item.tax_rate)}%</p>
+                {gstEnabled && (
+                  <p className="text-xs text-muted-foreground">GST {Number(item.tax_rate)}%</p>
+                )}
               </button>
             ))}
             {visibleItems.length === 0 && (
@@ -307,7 +326,8 @@ function OrderScreen() {
                 <div className="flex-1">
                   <p className="font-semibold leading-tight">{line.item_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {inr(Number(line.unit_price))} · GST {Number(line.tax_rate)}%
+                    {inr(Number(line.unit_price))}
+                    {gstEnabled ? ` · GST ${Number(line.tax_rate)}%` : ""}
                   </p>
                 </div>
                 {!isSettled && (
@@ -347,7 +367,7 @@ function OrderScreen() {
           </div>
 
           <div className="space-y-2 text-base">
-            <Row label="Subtotal" value={inr(totals.subtotal)} />
+            <Row label="Subtotal" value={inr(displayTotals.subtotal)} />
             <div className="flex items-center justify-between gap-3">
               <span>Discount (₹)</span>
               <Input
@@ -360,10 +380,10 @@ function OrderScreen() {
                 className="h-10 w-28 text-right"
               />
             </div>
-            <Row label="GST" value={inr(totals.taxAmount)} />
+            {billGstEnabled && <Row label="GST" value={inr(displayTotals.taxAmount)} />}
             <div className="flex items-center justify-between border-t border-border pt-3 text-2xl font-extrabold">
               <span>Total</span>
-              <span>{inr(totals.total)}</span>
+              <span>{inr(displayTotals.total)}</span>
             </div>
           </div>
 

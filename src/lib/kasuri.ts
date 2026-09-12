@@ -22,9 +22,14 @@ const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 1
 
 /**
  * Prices are tax-exclusive. A discount reduces the taxable value
- * proportionally across all lines.
+ * proportionally across all lines. When gstEnabled is false, tax is zero.
  */
-export function computeTotals(lines: BillLine[], discountInput = 0): BillTotals {
+export function computeTotals(
+  lines: BillLine[],
+  discountInput = 0,
+  options?: { gstEnabled?: boolean },
+): BillTotals {
+  const gstEnabled = options?.gstEnabled ?? true;
   const subtotal = round2(
     lines.reduce((sum, line) => sum + Number(line.unit_price) * line.quantity, 0),
   );
@@ -35,7 +40,7 @@ export function computeTotals(lines: BillLine[], discountInput = 0): BillTotals 
   );
   const discount = round2(Math.min(Math.max(discountInput || 0, 0), subtotal));
   const factor = subtotal > 0 ? (subtotal - discount) / subtotal : 0;
-  const taxAmount = round2(rawTax * factor);
+  const taxAmount = gstEnabled ? round2(rawTax * factor) : 0;
   const total = round2(subtotal - discount + taxAmount);
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   return { subtotal, discount, taxAmount, total, itemCount };

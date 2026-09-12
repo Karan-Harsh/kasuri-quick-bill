@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BookOpen, LayoutGrid, LogOut } from "lucide-react";
+import { BarChart3, BookOpen, LayoutGrid, LogOut, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/hooks/useStaff";
@@ -39,6 +39,13 @@ export function AppHeader() {
               <BarChart3 className="mr-2 size-5" /> Reports
             </Link>
           </Button>
+          {staff?.role === "admin" && (
+            <Button asChild variant="ghost" className="h-11 text-base">
+              <Link to="/settings" activeProps={{ className: "bg-accent" }}>
+                <Settings className="mr-2 size-5" /> Settings
+              </Link>
+            </Button>
+          )}
         </nav>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span className="hidden sm:inline">

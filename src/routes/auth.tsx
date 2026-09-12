@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -23,15 +23,33 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    supabase.rpc("has_admin").then(({ data, error }) => {
+      if (error) {
+        setHasAdmin(false);
+        return;
+      }
+      setHasAdmin(Boolean(data));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasAdmin) setMode("signin");
+  }, [hasAdmin]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
       if (mode === "signup") {
+        if (hasAdmin) {
+          throw new Error("Ask your admin to create a staff account for you.");
+        }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -56,6 +74,8 @@ function AuthPage() {
     }
   }
 
+  const bootstrapMode = hasAdmin === false;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md border-border/70 shadow-sm">
@@ -64,12 +84,12 @@ function AuthPage() {
             Kasuri
           </Link>
           <CardTitle className="mt-4 text-xl">
-            {mode === "signin" ? "Staff sign in" : "Create staff account"}
+            {mode === "signin" ? "Staff sign in" : "Create owner account"}
           </CardTitle>
           <CardDescription>
             {mode === "signin"
               ? "Sign in to open the billing counter."
-              : "The first account created becomes the owner/admin."}
+              : "The first account becomes the owner/admin."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -100,18 +120,25 @@ function AuthPage() {
               />
             </div>
             <Button type="submit" disabled={busy} className="h-12 w-full text-base">
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create owner account"}
             </Button>
           </form>
-          <button
-            type="button"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="mt-6 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {mode === "signin"
-              ? "No account yet? Create one"
-              : "Already have an account? Sign in"}
-          </button>
+          {bootstrapMode && (
+            <button
+              type="button"
+              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+              className="mt-6 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              {mode === "signin"
+                ? "First time here? Create owner account"
+                : "Already have an account? Sign in"}
+            </button>
+          )}
+          {hasAdmin && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              Need an account? Ask your admin to create one in Settings.
+            </p>
+          )}
         </CardContent>
       </Card>
     </main>

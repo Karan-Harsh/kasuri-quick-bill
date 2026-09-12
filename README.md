@@ -150,25 +150,87 @@ Keep the architecture simple and maintainable. Do not add inventory management, 
 Build the application as a functional MVP rather than just a visual prototype.
 
 
-The app name is Kasuri which is also the name of the resteraunt
+The app name is Kasuri which is also the name of the restaurant.
 
-This project was built with [Lovable](https://lovable.dev).
+## Connect your Supabase project
 
-## Build with Lovable
+This app uses **your** Supabase project (Postgres + Auth). The old Lovable-hosted database is no longer wired in.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/0c85e339-da0f-4831-aa15-438c850cb2e9).
+### 1. Create a Supabase project
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+1. Sign in at [supabase.com/dashboard](https://supabase.com/dashboard)
+2. **New project** → pick a name, password, and region (choose one close to India if most staff are there)
+3. Wait until the project finishes provisioning
+
+### 2. Enable email auth
+
+In the Supabase dashboard:
+
+1. **Authentication** → **Providers** → **Email** → enable Email provider
+2. For local dev you can disable “Confirm email” under **Authentication** → **Sign In / Providers** → Email settings (optional; speeds up first signup)
+
+### 3. Apply the database schema
+
+Install the [Supabase CLI](https://supabase.com/docs/guides/cli), then from this repo:
+
+```sh
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+bun run db:push
+```
+
+`YOUR_PROJECT_REF` is the ID in your project URL: `https://YOUR_PROJECT_REF.supabase.co`.
+
+This runs the migrations in `supabase/migrations/` (tables, RLS, seed menu, 8 tables, bill sequence starting at 1001).
+
+### 4. Configure environment variables
+
+```sh
+cp .env.example .env
+```
+
+Fill in from **Project Settings → API**:
+
+| Variable | Where |
+|----------|--------|
+| `SUPABASE_URL` / `VITE_SUPABASE_URL` | Project URL |
+| `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Publishable key (`anon` / new publishable key) |
+| `SUPABASE_PROJECT_ID` / `VITE_SUPABASE_PROJECT_ID` | Project ref / ID |
+
+Server-side code reads `SUPABASE_*`; the browser bundle reads `VITE_*`. Set both pairs to the same values.
+
+### 5. Run locally
+
+```sh
+bun install
+bun run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000), create the first staff account (becomes **admin**), then use the app.
+
+### Migrating data from the old Lovable database
+
+If you still have access to the previous Supabase project, export tables from its SQL editor or use `pg_dump`, then import into your new project. Otherwise start fresh — migrations already seed sample menu items and 8 tables.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Requires [Bun](https://bun.sh) or Node.js 20+.
 
 ```sh
 git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+cd kasuri-quick-bill
+cp .env.example .env
+# fill in Supabase credentials, then:
+bun install
+bun run db:push   # first time only
+bun run dev
 ```
+
+Other scripts:
+
+| Command | Purpose |
+|---------|---------|
+| `bun run build` | Production build |
+| `bun run db:push` | Apply migrations to linked Supabase project |
+| `bun run lint` | ESLint |
+

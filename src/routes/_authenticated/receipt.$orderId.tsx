@@ -1,11 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { ArrowLeft, Printer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { inr, orderTypeLabel, paymentLabel } from "@/lib/kasuri";
 
 export const Route = createFileRoute("/_authenticated/receipt/$orderId")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    print: search["print"] === "1" || search["print"] === true,
+  }),
   head: () => ({
     meta: [
       { title: "Receipt — Kasuri" },
@@ -20,6 +24,8 @@ export const Route = createFileRoute("/_authenticated/receipt/$orderId")({
 
 function Receipt() {
   const { orderId } = Route.useParams();
+  const { print: autoPrint } = Route.useSearch();
+  const printedRef = useRef(false);
 
   const orderQuery = useQuery({
     queryKey: ["receipt", orderId],
@@ -36,6 +42,13 @@ function Receipt() {
 
   const order = orderQuery.data;
 
+  useEffect(() => {
+    if (!autoPrint || !order || printedRef.current) return;
+    printedRef.current = true;
+    const timer = window.setTimeout(() => window.print(), 400);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint, order]);
+
   if (!order) {
     return (
       <div className="p-8">
@@ -50,6 +63,7 @@ function Receipt() {
     a.created_at.localeCompare(b.created_at),
   );
   const created = new Date(order.completed_at ?? order.created_at);
+  const showGst = Number(order.tax_amount) > 0;
 
   return (
     <div className="min-h-screen bg-muted/40 py-8">
@@ -96,7 +110,7 @@ function Receipt() {
               <th className="py-2">Item</th>
               <th className="py-2 text-right">Rate</th>
               <th className="py-2 text-right">Qty</th>
-              <th className="py-2 text-right">GST</th>
+              {showGst && <th className="py-2 text-right">GST</th>}
               <th className="py-2 text-right">Amount</th>
             </tr>
           </thead>
@@ -106,7 +120,7 @@ function Receipt() {
                 <td className="py-2">{line.item_name}</td>
                 <td className="py-2 text-right">{inr(Number(line.unit_price))}</td>
                 <td className="py-2 text-right">{line.quantity}</td>
-                <td className="py-2 text-right">{Number(line.tax_rate)}%</td>
+                {showGst && <td className="py-2 text-right">{Number(line.tax_rate)}%</td>}
                 <td className="py-2 text-right">
                   {inr(Number(line.unit_price) * line.quantity)}
                 </td>
@@ -120,7 +134,7 @@ function Receipt() {
           {Number(order.discount) > 0 && (
             <Row label="Discount" value={`- ${inr(Number(order.discount))}`} />
           )}
-          <Row label="GST" value={inr(Number(order.tax_amount))} />
+          {showGst && <Row label="GST" value={inr(Number(order.tax_amount))} />}
           <div className="flex justify-between border-t border-border pt-2 text-xl font-extrabold">
             <span>Total</span>
             <span>{inr(Number(order.total))}</span>

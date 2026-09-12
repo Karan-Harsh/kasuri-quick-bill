@@ -1,10 +1,21 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
-<!-- LOVABLE:END -->
+# Kasuri Quick Bill
+
+Simple restaurant POS: 8 tables, parcel orders, GST billing, receipts, and sales reports.
+
+## Stack
+
+- TanStack Start + React + TypeScript
+- Supabase (Postgres, Auth, RLS)
+- Tailwind CSS + shadcn/ui
+
+## Conventions
+
+- Routes live in `src/routes/` (file-based TanStack Router). Do not add Next.js-style `pages/`.
+- Business logic for totals and formatting: `src/lib/kasuri.ts`
+- Database schema changes: add SQL files under `supabase/migrations/`, then run `supabase db push`
+- Env vars: copy `.env.example` to `.env` (never commit `.env`)
+
+## Roles
+
+- First signed-up user becomes `admin` (menu edits); later users are `cashiers`
+- Menu write access is enforced in Postgres RLS and in the Menu UI

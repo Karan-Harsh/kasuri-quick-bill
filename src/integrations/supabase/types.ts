@@ -131,6 +131,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           discount: number
+          gst_applied: boolean
           id: string
           note: string | null
           order_type: string
@@ -147,6 +148,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           discount?: number
+          gst_applied?: boolean
           id?: string
           note?: string | null
           order_type: string
@@ -163,6 +165,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           discount?: number
+          gst_applied?: boolean
           id?: string
           note?: string | null
           order_type?: string
@@ -215,6 +218,27 @@ export type Database = {
           },
         ]
       }
+      organization_settings: {
+        Row: {
+          gst_enabled: boolean
+          id: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          gst_enabled?: boolean
+          id?: number
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          gst_enabled?: boolean
+          id?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       restaurant_tables: {
         Row: {
           created_at: string
@@ -265,6 +289,10 @@ export type Database = {
       claim_staff_role: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_admin: {
+        Args: never
+        Returns: boolean
       }
     }
     Enums: {

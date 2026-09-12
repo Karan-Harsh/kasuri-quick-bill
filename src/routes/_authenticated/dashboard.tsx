@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { computeTotals, inr } from "@/lib/kasuri";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -29,6 +30,8 @@ const startOfToday = () => {
 function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: orgSettings } = useOrganizationSettings();
+  const gstEnabled = orgSettings?.gst_enabled ?? false;
 
   const tablesQuery = useQuery({
     queryKey: ["tables"],
@@ -122,7 +125,7 @@ function Dashboard() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {(tablesQuery.data ?? []).map((table) => {
               const order = openOrders.find((o) => o.table_id === table.id);
-              const totals = order ? computeTotals(order.order_items) : null;
+              const totals = order ? computeTotals(order.order_items, 0, { gstEnabled }) : null;
               return (
                 <button
                   key={table.id}
@@ -168,7 +171,7 @@ function Dashboard() {
             <h2 className="text-xl font-bold">Open parcel bills</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {parcelOrders.map((order) => {
-                const totals = computeTotals(order.order_items);
+                const totals = computeTotals(order.order_items, 0, { gstEnabled });
                 return (
                   <button
                     key={order.id}

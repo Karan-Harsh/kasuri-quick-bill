@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { inr } from "@/lib/kasuri";
+import { seedKasuriStarterData } from "@/lib/seed-starter-data";
 import { useStaff } from "@/hooks/useStaff";
 
 export const Route = createFileRoute("/_authenticated/menu")({
@@ -91,7 +92,26 @@ function MenuPage() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     queryClient.invalidateQueries({ queryKey: ["categories"] });
+    queryClient.invalidateQueries({ queryKey: ["tables"] });
   };
+
+  const seedStarter = useMutation({
+    mutationFn: seedKasuriStarterData,
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(
+        `Starter data loaded — ${result.tables} tables, ${result.menuItems} dishes`,
+      );
+      if (result.tablesSkipped) {
+        toast.message("Tables were not added", {
+          description:
+            "Run the SQL in supabase/sql-editor-tables.sql once, then click Load starter menu again.",
+        });
+      }
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not load starter data"),
+  });
 
   const saveItem = useMutation({
     mutationFn: async (input: ItemForm) => {
@@ -172,14 +192,26 @@ function MenuPage() {
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-3xl font-bold">Menu</h1>
-          {isAdmin && (
-            <Button
-              className="h-12 text-base"
-              onClick={() => setForm(emptyForm(categories[0]?.id ?? ""))}
-            >
-              <Plus className="mr-2 size-5" /> Add item
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && (categories.length === 0 || items.length === 0) && (
+              <Button
+                variant="outline"
+                className="h-12 text-base"
+                disabled={seedStarter.isPending}
+                onClick={() => seedStarter.mutate()}
+              >
+                Load starter menu
+              </Button>
+            )}
+            {isAdmin && (
+              <Button
+                className="h-12 text-base"
+                onClick={() => setForm(emptyForm(categories[0]?.id ?? ""))}
+              >
+                <Plus className="mr-2 size-5" /> Add item
+              </Button>
+            )}
+          </div>
         </div>
 
         {!isAdmin && (
