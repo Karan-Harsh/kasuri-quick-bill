@@ -140,6 +140,15 @@ function OrderScreen() {
         quantity: 1,
       });
       if (error) throw error;
+    }
+  }
+
+  // Taps are queued so two quick taps on the same item never race.
+  const addItem = useMutation({
+    mutationFn: (menuItem: { id: string; name: string; price: number; tax_rate: number }) => {
+      const next = queueRef.current.then(() => addLine(menuItem));
+      queueRef.current = next.catch(() => undefined);
+      return next;
     },
     onSuccess: refreshItems,
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add item"),
