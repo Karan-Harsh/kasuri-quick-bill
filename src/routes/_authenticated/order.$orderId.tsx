@@ -99,6 +99,8 @@ function OrderScreen() {
     [items, discountText],
   );
 
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+
   const refreshItems = () => {
     queryClient.invalidateQueries({ queryKey: ["order-items", orderId] });
     queryClient.invalidateQueries({ queryKey: ["open-orders"] });
