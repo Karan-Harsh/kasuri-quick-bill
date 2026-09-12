@@ -106,12 +106,18 @@ function OrderScreen() {
 
   const addItem = useMutation({
     mutationFn: async (menuItem: { id: string; name: string; price: number; tax_rate: number }) => {
-      const existing = items.find(
-        (line) =>
-          line.menu_item_id === menuItem.id &&
-          Number(line.unit_price) === Number(menuItem.price) &&
-          Number(line.tax_rate) === Number(menuItem.tax_rate),
-      );
+      // Read the current line straight from the database so rapid taps merge
+      // into one line instead of creating duplicates from stale cache.
+      const { data: existingRows, error: lookupError } = await supabase
+        .from("order_items")
+        .select("id, quantity")
+        .eq("order_id", orderId)
+        .eq("menu_item_id", menuItem.id)
+        .eq("unit_price", menuItem.price)
+        .eq("tax_rate", menuItem.tax_rate)
+        .limit(1);
+      if (lookupError) throw lookupError;
+      const existing = existingRows?.[0];
       if (existing) {
         const { error } = await supabase
           .from("order_items")
