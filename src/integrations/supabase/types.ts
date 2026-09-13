@@ -81,6 +81,8 @@ export type Database = {
           created_at: string
           id: string
           item_name: string
+          kitchen_sent_at: string | null
+          kitchen_ticket_id: string | null
           menu_item_id: string | null
           order_id: string
           quantity: number
@@ -91,6 +93,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_name: string
+          kitchen_sent_at?: string | null
+          kitchen_ticket_id?: string | null
           menu_item_id?: string | null
           order_id: string
           quantity?: number
@@ -101,6 +105,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_name?: string
+          kitchen_sent_at?: string | null
+          kitchen_ticket_id?: string | null
           menu_item_id?: string | null
           order_id?: string
           quantity?: number
@@ -108,6 +114,13 @@ export type Database = {
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "order_items_kitchen_ticket_id_fkey"
+            columns: ["kitchen_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "kitchen_tickets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_menu_item_id_fkey"
             columns: ["menu_item_id"]
@@ -124,6 +137,44 @@ export type Database = {
           },
         ]
       }
+      kitchen_tickets: {
+        Row: {
+          completed_at: string | null
+          id: string
+          kot_number: number
+          order_id: string
+          sent_at: string
+          sent_by: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          id?: string
+          kot_number?: number
+          order_id: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          id?: string
+          kot_number?: number
+          order_id?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_tickets_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           bill_number: number
@@ -133,6 +184,7 @@ export type Database = {
           discount: number
           gst_applied: boolean
           id: string
+          kitchen_ready_at: string | null
           note: string | null
           order_type: string
           payment_method: string | null
@@ -150,6 +202,7 @@ export type Database = {
           discount?: number
           gst_applied?: boolean
           id?: string
+          kitchen_ready_at?: string | null
           note?: string | null
           order_type: string
           payment_method?: string | null
@@ -167,6 +220,7 @@ export type Database = {
           discount?: number
           gst_applied?: boolean
           id?: string
+          kitchen_ready_at?: string | null
           note?: string | null
           order_type?: string
           payment_method?: string | null
@@ -239,6 +293,77 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          created_at: string
+          current_quantity: number
+          id: string
+          is_active: boolean
+          name: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_quantity?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_quantity?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          item_id: string
+          movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          note: string | null
+          quantity_after: number
+          quantity_change: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id: string
+          movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          note?: string | null
+          quantity_after: number
+          quantity_change: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id?: string
+          movement_type?: Database["public"]["Enums"]["inventory_movement_type"]
+          note?: string | null
+          quantity_after?: number
+          quantity_change?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurant_tables: {
         Row: {
           created_at: string
@@ -290,13 +415,35 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      acknowledge_kitchen_ready: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
+      complete_kitchen_ticket: {
+        Args: { p_ticket_id: string }
+        Returns: undefined
+      }
       has_admin: {
         Args: never
         Returns: boolean
       }
+      record_inventory_movement: {
+        Args: {
+          p_item_id: string
+          p_movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          p_note?: string | null
+          p_quantity: number
+        }
+        Returns: Database["public"]["Tables"]["inventory_items"]["Row"]
+      }
+      send_order_to_kitchen: {
+        Args: { p_order_id: string }
+        Returns: string
+      }
     }
     Enums: {
-      app_role: "admin" | "cashier"
+      app_role: "admin" | "cashier" | "kitchen"
+      inventory_movement_type: "used" | "received" | "count"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -424,7 +571,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "cashier"],
+      app_role: ["admin", "cashier", "kitchen"],
+      inventory_movement_type: ["used", "received", "count"],
     },
   },
 } as const
