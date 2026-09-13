@@ -5,7 +5,7 @@ import { requireAdmin } from "@/server/admin.middleware";
 const createStaffInput = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(["admin", "cashier"]).default("cashier"),
+  role: z.enum(["admin", "cashier", "kitchen"]).default("cashier"),
 });
 
 export const listStaffUsers = createServerFn({ method: "GET" })

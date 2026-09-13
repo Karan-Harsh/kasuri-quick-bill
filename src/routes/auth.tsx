@@ -65,8 +65,8 @@ function AuthPage() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-      await supabase.rpc("claim_staff_role");
-      navigate({ to: "/dashboard", replace: true });
+      const { data: role } = await supabase.rpc("claim_staff_role");
+      navigate({ to: role === "kitchen" ? "/kitchen" : "/dashboard", replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sign in failed");
     } finally {

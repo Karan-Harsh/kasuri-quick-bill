@@ -41,7 +41,7 @@ function SettingsPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"cashier" | "admin">("cashier");
+  const [role, setRole] = useState<"cashier" | "admin" | "kitchen">("cashier");
 
   const staffQuery = useQuery({
     queryKey: ["staff-users"],
@@ -140,8 +140,8 @@ function SettingsPage() {
           <div>
             <h2 className="text-xl font-bold">Staff accounts</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create login credentials for cashiers. They use the staff sign-in page — public
-              sign-up is disabled once an admin exists.
+              Create login credentials for cashiers and kitchen staff. They use the staff
+              sign-in page — public sign-up is disabled once an admin exists.
             </p>
           </div>
 
@@ -173,13 +173,14 @@ function SettingsPage() {
               <Label>Role</Label>
               <Select
                 value={role}
-                onValueChange={(value) => setRole(value as "cashier" | "admin")}
+                onValueChange={(value) => setRole(value as "cashier" | "admin" | "kitchen")}
               >
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cashier">Cashier</SelectItem>
+                  <SelectItem value="kitchen">Kitchen</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>

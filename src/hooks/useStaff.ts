@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface StaffInfo {
   userId: string | null;
   email: string | null;
-  role: "admin" | "cashier" | null;
+  role: "admin" | "cashier" | "kitchen" | null;
 }
 
 export function useStaff() {

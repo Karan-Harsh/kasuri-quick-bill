@@ -81,6 +81,8 @@ export type Database = {
           created_at: string
           id: string
           item_name: string
+          kitchen_sent_at: string | null
+          kitchen_ticket_id: string | null
           menu_item_id: string | null
           order_id: string
           quantity: number
@@ -91,6 +93,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_name: string
+          kitchen_sent_at?: string | null
+          kitchen_ticket_id?: string | null
           menu_item_id?: string | null
           order_id: string
           quantity?: number
@@ -101,6 +105,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_name?: string
+          kitchen_sent_at?: string | null
+          kitchen_ticket_id?: string | null
           menu_item_id?: string | null
           order_id?: string
           quantity?: number
@@ -108,6 +114,13 @@ export type Database = {
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "order_items_kitchen_ticket_id_fkey"
+            columns: ["kitchen_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "kitchen_tickets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_menu_item_id_fkey"
             columns: ["menu_item_id"]
@@ -117,6 +130,44 @@ export type Database = {
           },
           {
             foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitchen_tickets: {
+        Row: {
+          completed_at: string | null
+          id: string
+          kot_number: number
+          order_id: string
+          sent_at: string
+          sent_by: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          id?: string
+          kot_number?: number
+          order_id: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          id?: string
+          kot_number?: number
+          order_id?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_tickets_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
@@ -290,13 +341,21 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      complete_kitchen_ticket: {
+        Args: { p_ticket_id: string }
+        Returns: undefined
+      }
       has_admin: {
         Args: never
         Returns: boolean
       }
+      send_order_to_kitchen: {
+        Args: { p_order_id: string }
+        Returns: string
+      }
     }
     Enums: {
-      app_role: "admin" | "cashier"
+      app_role: "admin" | "cashier" | "kitchen"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -424,7 +483,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "cashier"],
+      app_role: ["admin", "cashier", "kitchen"],
     },
   },
 } as const

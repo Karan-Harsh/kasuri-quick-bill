@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChefHat, Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
@@ -131,7 +131,11 @@ function OrderScreen() {
       if (existing) {
         const { error } = await supabase
           .from("order_items")
-          .update({ quantity: existing.quantity + 1 })
+          .update({
+            quantity: existing.quantity + 1,
+            kitchen_sent_at: null,
+            kitchen_ticket_id: null,
+          })
           .eq("id", existing.id);
         if (error) throw error;
         return;
@@ -168,11 +172,37 @@ function OrderScreen() {
       }
       const { error } = await supabase
         .from("order_items")
-        .update({ quantity: input.quantity })
+        .update({
+          quantity: input.quantity,
+          kitchen_sent_at: null,
+          kitchen_ticket_id: null,
+        })
         .eq("id", input.id);
       if (error) throw error;
     },
     onSuccess: refreshItems,
+  });
+
+  const sendToKitchen = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("send_order_to_kitchen", {
+        p_order_id: orderId,
+      });
+      if (error) throw error;
+      if (!data) throw new Error("Kitchen ticket was not created");
+      return data as string;
+    },
+    onSuccess: (ticketId) => {
+      refreshItems();
+      toast.success("Sent to kitchen");
+      navigate({
+        to: "/kot/$ticketId",
+        params: { ticketId },
+        search: { print: "1" },
+      });
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not send to kitchen"),
   });
 
   const settle = useMutation({
@@ -247,6 +277,7 @@ function OrderScreen() {
 
   const isSettled = order.status !== "OPEN";
   const tableLabel = order.restaurant_tables?.label;
+  const unsentCount = items.filter((line) => !line.kitchen_sent_at).length;
   const visibleItems = menuQuery.data?.filter((item) => item.category_id === activeCategory) ?? [];
   const billGstEnabled = isSettled ? Number(order.tax_amount) > 0 : gstEnabled;
   const displayTotals = isSettled
@@ -328,6 +359,7 @@ function OrderScreen() {
                   <p className="text-xs text-muted-foreground">
                     {inr(Number(line.unit_price))}
                     {gstEnabled ? ` · GST ${Number(line.tax_rate)}%` : ""}
+                    {line.kitchen_sent_at ? " · Sent to kitchen" : ""}
                   </p>
                 </div>
                 {!isSettled && (
@@ -400,6 +432,16 @@ function OrderScreen() {
             </div>
           ) : (
             <div className="space-y-3">
+              <Button
+                variant="secondary"
+                className="h-14 w-full text-lg font-bold"
+                disabled={sendToKitchen.isPending || unsentCount === 0}
+                onClick={() => sendToKitchen.mutate()}
+              >
+                <ChefHat className="mr-2 size-5" />
+                Send to kitchen
+                {unsentCount > 0 ? ` (${unsentCount})` : ""}
+              </Button>
               <div className="grid grid-cols-3 gap-2">
                 {PAYMENT_METHODS.map((option) => (
                   <Button
