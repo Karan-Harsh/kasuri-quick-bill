@@ -184,6 +184,7 @@ export type Database = {
           discount: number
           gst_applied: boolean
           id: string
+          kitchen_ready_at: string | null
           note: string | null
           order_type: string
           payment_method: string | null
@@ -201,6 +202,7 @@ export type Database = {
           discount?: number
           gst_applied?: boolean
           id?: string
+          kitchen_ready_at?: string | null
           note?: string | null
           order_type: string
           payment_method?: string | null
@@ -218,6 +220,7 @@ export type Database = {
           discount?: number
           gst_applied?: boolean
           id?: string
+          kitchen_ready_at?: string | null
           note?: string | null
           order_type?: string
           payment_method?: string | null
@@ -290,6 +293,77 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          created_at: string
+          current_quantity: number
+          id: string
+          is_active: boolean
+          name: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_quantity?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_quantity?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          item_id: string
+          movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          note: string | null
+          quantity_after: number
+          quantity_change: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id: string
+          movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          note?: string | null
+          quantity_after: number
+          quantity_change: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id?: string
+          movement_type?: Database["public"]["Enums"]["inventory_movement_type"]
+          note?: string | null
+          quantity_after?: number
+          quantity_change?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurant_tables: {
         Row: {
           created_at: string
@@ -341,6 +415,10 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      acknowledge_kitchen_ready: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
       complete_kitchen_ticket: {
         Args: { p_ticket_id: string }
         Returns: undefined
@@ -349,6 +427,15 @@ export type Database = {
         Args: never
         Returns: boolean
       }
+      record_inventory_movement: {
+        Args: {
+          p_item_id: string
+          p_movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          p_note?: string | null
+          p_quantity: number
+        }
+        Returns: Database["public"]["Tables"]["inventory_items"]["Row"]
+      }
       send_order_to_kitchen: {
         Args: { p_order_id: string }
         Returns: string
@@ -356,6 +443,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "cashier" | "kitchen"
+      inventory_movement_type: "used" | "received" | "count"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -484,6 +572,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "cashier", "kitchen"],
+      inventory_movement_type: ["used", "received", "count"],
     },
   },
 } as const

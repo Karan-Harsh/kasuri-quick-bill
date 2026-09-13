@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BookOpen, ChefHat, LayoutGrid, LogOut, Settings } from "lucide-react";
+import { BarChart3, BookOpen, ChefHat, LayoutGrid, LogOut, Package, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/hooks/useStaff";
@@ -59,6 +59,13 @@ export function AppHeader() {
                   <ChefHat className="mr-2 size-5" /> Kitchen
                 </Link>
               </Button>
+              {staff?.role === "admin" && (
+                <Button asChild variant="ghost" className="h-11 text-base">
+                  <Link to="/inventory" activeProps={{ className: "bg-accent" }}>
+                    <Package className="mr-2 size-5" /> Inventory
+                  </Link>
+                </Button>
+              )}
               {staff?.role === "admin" && (
                 <Button asChild variant="ghost" className="h-11 text-base">
                   <Link to="/settings" activeProps={{ className: "bg-accent" }}>

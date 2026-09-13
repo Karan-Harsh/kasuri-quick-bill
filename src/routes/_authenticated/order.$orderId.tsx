@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { computeTotals, inr, PAYMENT_METHODS, paymentLabel, type PaymentMethod } from "@/lib/kasuri";
+import { printKotInBackground } from "@/lib/print-kot";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 
 export const Route = createFileRoute("/_authenticated/order/$orderId")({
@@ -190,16 +191,21 @@ function OrderScreen() {
       });
       if (error) throw error;
       if (!data) throw new Error("Kitchen ticket was not created");
-      return data as string;
+
+      const { data: ticket, error: ticketError } = await supabase
+        .from("kitchen_tickets")
+        .select("id, kot_number")
+        .eq("id", data)
+        .single();
+      if (ticketError) throw ticketError;
+
+      return ticket;
     },
-    onSuccess: (ticketId) => {
+    onSuccess: (ticket) => {
       refreshItems();
-      toast.success("Sent to kitchen");
-      navigate({
-        to: "/kot/$ticketId",
-        params: { ticketId },
-        search: { print: "1" },
-      });
+      queryClient.invalidateQueries({ queryKey: ["open-orders"] });
+      toast.success(`Sent to kitchen · KOT #${ticket.kot_number}`);
+      printKotInBackground(ticket.id);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not send to kitchen"),
