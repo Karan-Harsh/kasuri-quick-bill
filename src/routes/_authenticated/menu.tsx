@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { inr } from "@/lib/kasuri";
-import { seedKasuriStarterData } from "@/lib/seed-starter-data";
 import { useStaff } from "@/hooks/useStaff";
 
 export const Route = createFileRoute("/_authenticated/menu")({
@@ -67,26 +66,22 @@ function MenuPage() {
 
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("categories")
-        .select("id, name, sort_order")
-        .order("sort_order");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<{ id: string; name: string; sort_order: number }[]>("/categories"),
   });
 
   const itemsQuery = useQuery({
     queryKey: ["menu-items", "all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .select("id, name, price, tax_rate, is_active, category_id")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      api.get<
+        {
+          id: string;
+          name: string;
+          price: number;
+          tax_rate: number;
+          is_active: boolean;
+          category_id: string;
+        }[]
+      >("/menu-items"),
   });
 
   const invalidate = () => {
@@ -96,18 +91,13 @@ function MenuPage() {
   };
 
   const seedStarter = useMutation({
-    mutationFn: seedKasuriStarterData,
+    mutationFn: () =>
+      api.post<{ tables: number; menuItems: number; tablesSkipped: boolean }>("/seed-starter"),
     onSuccess: (result) => {
       invalidate();
       toast.success(
         `Starter data loaded — ${result.tables} tables, ${result.menuItems} dishes`,
       );
-      if (result.tablesSkipped) {
-        toast.message("Tables were not added", {
-          description:
-            "Run the SQL in supabase/sql-editor-tables.sql once, then click Load starter menu again.",
-        });
-      }
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not load starter data"),
@@ -124,13 +114,8 @@ function MenuPage() {
       };
       if (!payload.name) throw new Error("Item name is required");
       if (!payload.category_id) throw new Error("Pick a category");
-      if (input.id) {
-        const { error } = await supabase.from("menu_items").update(payload).eq("id", input.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("menu_items").insert(payload);
-        if (error) throw error;
-      }
+      if (input.id) await api.patch(`/menu-items/${input.id}`, payload);
+      else await api.post("/menu-items", payload);
     },
     onSuccess: () => {
       invalidate();
@@ -141,22 +126,14 @@ function MenuPage() {
   });
 
   const toggleActive = useMutation({
-    mutationFn: async (input: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("menu_items")
-        .update({ is_active: input.is_active })
-        .eq("id", input.id);
-      if (error) throw error;
-    },
+    mutationFn: (input: { id: string; is_active: boolean }) =>
+      api.patch(`/menu-items/${input.id}`, { is_active: input.is_active }),
     onSuccess: invalidate,
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update"),
   });
 
   const deleteItem = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("menu_items").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => api.del(`/menu-items/${id}`),
     onSuccess: () => {
       invalidate();
       toast.success("Item deleted");
@@ -169,11 +146,7 @@ function MenuPage() {
     mutationFn: async (name: string) => {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Category name is required");
-      const nextOrder = (categoriesQuery.data?.length ?? 0) + 1;
-      const { error } = await supabase
-        .from("categories")
-        .insert({ name: trimmed, sort_order: nextOrder });
-      if (error) throw error;
+      await api.post("/categories", { name: trimmed });
     },
     onSuccess: () => {
       invalidate();

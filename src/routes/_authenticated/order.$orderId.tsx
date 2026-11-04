@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChefHat, Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,36 @@ import { Input } from "@/components/ui/input";
 import { computeTotals, inr, PAYMENT_METHODS, paymentLabel, type PaymentMethod } from "@/lib/kasuri";
 import { printKotInBackground } from "@/lib/print-kot";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
+
+interface Order {
+  id: string;
+  bill_number: number;
+  order_type: string;
+  table_id: string | null;
+  status: string;
+  discount: number;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  payment_method: string | null;
+  created_at: string;
+  completed_at: string | null;
+  kitchen_ready_at: string | null;
+  restaurant_tables: { label: string } | null;
+}
+
+interface OrderLine {
+  id: string;
+  order_id: string;
+  menu_item_id: string | null;
+  item_name: string;
+  unit_price: number;
+  tax_rate: number;
+  quantity: number;
+  created_at: string;
+  kitchen_ticket_id: string | null;
+  kitchen_sent_at: string | null;
+}
 
 export const Route = createFileRoute("/_authenticated/order/$orderId")({
   head: () => ({
@@ -35,53 +65,25 @@ function OrderScreen() {
 
   const orderQuery = useQuery({
     queryKey: ["order", orderId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*, restaurant_tables(label)")
-        .eq("id", orderId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Order>(`/orders/${orderId}`),
   });
 
   const itemsQuery = useQuery({
     queryKey: ["order-items", orderId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", orderId)
-        .order("created_at");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<OrderLine[]>(`/orders/${orderId}/items`),
   });
 
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("categories")
-        .select("id, name, sort_order")
-        .order("sort_order");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<{ id: string; name: string; sort_order: number }[]>("/categories"),
   });
 
   const menuQuery = useQuery({
     queryKey: ["menu-items", "active"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .select("id, name, price, tax_rate, category_id")
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      api.get<{ id: string; name: string; price: number; tax_rate: number; category_id: string }[]>(
+        "/menu-items?active=1",
+      ),
   });
 
   const order = orderQuery.data;
@@ -110,47 +112,9 @@ function OrderScreen() {
     queryClient.invalidateQueries({ queryKey: ["open-orders"] });
   };
 
-  async function addLine(menuItem: {
-    id: string;
-    name: string;
-    price: number;
-    tax_rate: number;
-  }) {
-    {
-      // Read the current line straight from the database so rapid taps merge
-      // into one line instead of creating duplicates from stale cache.
-      const { data: existingRows, error: lookupError } = await supabase
-        .from("order_items")
-        .select("id, quantity")
-        .eq("order_id", orderId)
-        .eq("menu_item_id", menuItem.id)
-        .eq("unit_price", menuItem.price)
-        .eq("tax_rate", menuItem.tax_rate)
-        .limit(1);
-      if (lookupError) throw lookupError;
-      const existing = existingRows?.[0];
-      if (existing) {
-        const { error } = await supabase
-          .from("order_items")
-          .update({
-            quantity: existing.quantity + 1,
-            kitchen_sent_at: null,
-            kitchen_ticket_id: null,
-          })
-          .eq("id", existing.id);
-        if (error) throw error;
-        return;
-      }
-      const { error } = await supabase.from("order_items").insert({
-        order_id: orderId,
-        menu_item_id: menuItem.id,
-        item_name: menuItem.name,
-        unit_price: menuItem.price,
-        tax_rate: menuItem.tax_rate,
-        quantity: 1,
-      });
-      if (error) throw error;
-    }
+  // The server merges repeat taps into one line and only puts new quantity on unsent lines.
+  async function addLine(menuItem: { id: string }) {
+    await api.post(`/orders/${orderId}/items`, { menu_item_id: menuItem.id });
   }
 
   // Taps are queued so two quick taps on the same item never race.
@@ -165,42 +129,14 @@ function OrderScreen() {
   });
 
   const changeQty = useMutation({
-    mutationFn: async (input: { id: string; quantity: number }) => {
-      if (input.quantity <= 0) {
-        const { error } = await supabase.from("order_items").delete().eq("id", input.id);
-        if (error) throw error;
-        return;
-      }
-      const { error } = await supabase
-        .from("order_items")
-        .update({
-          quantity: input.quantity,
-          kitchen_sent_at: null,
-          kitchen_ticket_id: null,
-        })
-        .eq("id", input.id);
-      if (error) throw error;
-    },
+    mutationFn: (input: { id: string; quantity: number }) =>
+      api.patch(`/order-items/${input.id}`, { quantity: Math.max(0, input.quantity) }),
     onSuccess: refreshItems,
   });
 
   const sendToKitchen = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.rpc("send_order_to_kitchen", {
-        p_order_id: orderId,
-      });
-      if (error) throw error;
-      if (!data) throw new Error("Kitchen ticket was not created");
-
-      const { data: ticket, error: ticketError } = await supabase
-        .from("kitchen_tickets")
-        .select("id, kot_number")
-        .eq("id", data)
-        .single();
-      if (ticketError) throw ticketError;
-
-      return ticket;
-    },
+    mutationFn: () =>
+      api.post<{ id: string; kot_number: number }>(`/orders/${orderId}/send-to-kitchen`),
     onSuccess: (ticket) => {
       refreshItems();
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
@@ -212,26 +148,13 @@ function OrderScreen() {
   });
 
   const settle = useMutation({
+    // Totals are recalculated by the server from the saved lines.
     mutationFn: async () => {
       if (items.length === 0) throw new Error("Add at least one item before settling");
-
-      const payload = {
-        status: "COMPLETED" as const,
+      await api.post(`/orders/${orderId}/settle`, {
         discount: totals.discount,
-        subtotal: totals.subtotal,
-        tax_amount: totals.taxAmount,
-        total: totals.total,
         payment_method: method,
-        completed_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from("orders").update(payload).eq("id", orderId);
-      if (error) throw error;
-
-      const { error: payError } = await supabase
-        .from("payments")
-        .insert({ order_id: orderId, method, amount: totals.total });
-      if (payError) throw payError;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
@@ -240,17 +163,14 @@ function OrderScreen() {
       navigate({
         to: "/receipt/$orderId",
         params: { orderId },
-        search: { print: "1" },
+        search: { print: true },
       });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not settle"),
   });
 
   const discardOrder = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("orders").delete().eq("id", orderId);
-      if (error) throw error;
-    },
+    mutationFn: () => api.del(`/orders/${orderId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
       toast.success("Order discarded");
@@ -431,7 +351,7 @@ function OrderScreen() {
                 Paid by {paymentLabel(order.payment_method)}
               </p>
               <Button asChild className="h-12 w-full text-base">
-                <Link to="/receipt/$orderId" params={{ orderId }}>
+                <Link to="/receipt/$orderId" params={{ orderId }} search={{ print: false }}>
                   View receipt
                 </Link>
               </Button>

@@ -152,85 +152,71 @@ Build the application as a functional MVP rather than just a visual prototype.
 
 The app name is Kasuri which is also the name of the restaurant.
 
-## Connect your Supabase project
+## How it runs
 
-This app uses **your** Supabase project (Postgres + Auth). The old Lovable-hosted database is no longer wired in.
+Kasuri Quick Bill is a **Windows desktop app** (Tauri). Everything stays on the counter computer — no internet, no cloud account, no login.
 
-### 1. Create a Supabase project
-
-1. Sign in at [supabase.com/dashboard](https://supabase.com/dashboard)
-2. **New project** → pick a name, password, and region (choose one close to India if most staff are there)
-3. Wait until the project finishes provisioning
-
-### 2. Enable email auth
-
-In the Supabase dashboard:
-
-1. **Authentication** → **Providers** → **Email** → enable Email provider
-2. For local dev you can disable “Confirm email” under **Authentication** → **Sign In / Providers** → Email settings (optional; speeds up first signup)
-
-### 3. Apply the database schema
-
-Install the [Supabase CLI](https://supabase.com/docs/guides/cli), then from this repo:
-
-```sh
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
-bun run db:push
+```
+Tauri window (React screens)  ──►  local server (Bun + TypeScript, port 8787)  ──►  SQLite file
+                                        ▲
+              waiter phones over the restaurant Wi-Fi (when turned on in Settings)
 ```
 
-`YOUR_PROJECT_REF` is the ID in your project URL: `https://YOUR_PROJECT_REF.supabase.co`.
+- `server/` — the local server. Owns the database and every business rule (bill/KOT numbering, send to kitchen,
+  ready-to-serve, settling bills, inventory). Pushes live updates to every open screen over a WebSocket.
+  It is compiled into a single `.exe` and started automatically by the desktop app.
+- `src/` — the React screens (TanStack Router, React Query, Tailwind/shadcn). They call the server through `src/lib/api.ts`.
+- `waiter/` — the waiter phone app (React). Built into `dist-waiter/` and served by the local server at `/waiter`.
+- `src-tauri/` — the desktop shell: opens the window, starts/stops the local server.
 
-This runs the migrations in `supabase/migrations/` (tables, RLS, seed menu, 8 tables, bill sequence starting at 1001).
+## Waiter phones
 
-### 4. Configure environment variables
+1. On the counter: **Settings → Waiter phones → Let waiter phones connect**. The first time, Windows asks
+   whether to allow Kasuri on the network — click **Allow** (private networks).
+2. Click **Add a phone** and scan the QR code with the waiter's phone camera (phone on the same Wi-Fi).
+   Enter the waiter's name. The phone stays paired; remove it from the same screen if it's lost.
+3. Waiters pick a table, tap dishes and **Send to kitchen**. The counter chimes, shows who sent it, and
+   (optionally) prints the KOT. When the kitchen marks it ready, the table turns green on the phones.
 
-```sh
-cp .env.example .env
-```
+Phones can only take and send orders. Settling, discounts, menu, reports, inventory and settings are counter-only,
+enforced by the server. Tip: give the counter PC a fixed address in the Wi-Fi router so phones always find it.
 
-Fill in from **Project Settings → API**:
+**Data location** (shown in Settings): `C:\Users\<name>\AppData\Roaming\in.kasuri.quickbill\kasuri.db`.
+A backup copy is written to the `backups` folder next to it once a day; the last 30 are kept.
 
-| Variable | Where |
-|----------|--------|
-| `SUPABASE_URL` / `VITE_SUPABASE_URL` | Project URL |
-| `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Publishable key (`anon` / new publishable key) |
-| `SUPABASE_PROJECT_ID` / `VITE_SUPABASE_PROJECT_ID` | Project ref / ID |
+## Building the Windows installer
 
-Server-side code reads `SUPABASE_*`; the browser bundle reads `VITE_*`. Set both pairs to the same values.
+One-time setup on the Windows PC:
 
-### 5. Run locally
+1. Install [Bun](https://bun.sh) (`powershell -c "irm bun.sh/install.ps1 | iex"`).
+2. Install [Rust](https://rustup.rs) (accept the defaults).
+3. Install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with **Desktop development with C++**.
+
+Then in the project folder:
 
 ```sh
 bun install
-bun run dev
+bun run package
 ```
 
-Open [http://localhost:3000](http://localhost:3000), create the first staff account (becomes **admin**), then use the app.
-
-### Migrating data from the old Lovable database
-
-If you still have access to the previous Supabase project, export tables from its SQL editor or use `pg_dump`, then import into your new project. Otherwise start fresh — migrations already seed sample menu items and 8 tables.
+The installer is created at `src-tauri\target\release\bundle\nsis\Kasuri Quick Bill_1.0.0_x64-setup.exe`.
+Windows may warn that the installer isn't signed: **More info → Run anyway**.
 
 ## Development
 
-Requires [Bun](https://bun.sh) or Node.js 20+.
+Works on macOS, Windows or Linux with [Bun](https://bun.sh):
 
 ```sh
-git clone <this-repository-url>
-cd kasuri-quick-bill
-cp .env.example .env
-# fill in Supabase credentials, then:
 bun install
-bun run db:push   # first time only
-bun run dev
+bun run dev        # local server on :8787 + screens on http://localhost:3000
 ```
-
-Other scripts:
 
 | Command | Purpose |
 |---------|---------|
-| `bun run build` | Production build |
-| `bun run db:push` | Apply migrations to linked Supabase project |
+| `bun run dev` | Server (auto-restarts) + counter screens on http://localhost:3000 + waiter app at http://<this computer's IP>:8787/waiter (once waiter phones are on), data in `./data` |
+| `bun run app` | The real desktop window (needs Rust) |
+| `bun run test` | Business-rule tests for the server |
+| `bun run typecheck` | TypeScript checks for screens and server |
+| `bun run build:server` | Compile the server for this computer (`... windows` for a Windows `.exe`) |
+| `bun run package` | Build the desktop installer |
 | `bun run lint` | ESLint |
-

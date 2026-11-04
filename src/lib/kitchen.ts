@@ -11,6 +11,8 @@ export interface KitchenTicketSummary {
   kot_number: number;
   status: KitchenTicketStatus;
   sent_at: string;
+  /** Waiter who sent it from a phone; null when sent from the counter. */
+  sent_by?: string | null;
   completed_at: string | null;
   order_id: string;
   bill_number: number;

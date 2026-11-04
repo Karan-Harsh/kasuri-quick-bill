@@ -1,115 +1,68 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { HardDrive } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
-import { useStaff } from "@/hooks/useStaff";
-import { createStaffUser, listStaffUsers } from "@/server/staff.functions";
+import { WaiterPhonesCard } from "@/components/WaiterPhonesCard";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
       { title: "Settings — Kasuri" },
-      { name: "description", content: "Organization settings and staff accounts for Kasuri." },
+      { name: "description", content: "Billing, waiter phones and backups for Kasuri." },
       { name: "robots", content: "noindex" },
     ],
   }),
   component: SettingsPage,
 });
 
+interface SystemInfo {
+  dataDir: string;
+  dbPath: string;
+  backupDir: string;
+  lastBackup: string | null;
+}
+
 function SettingsPage() {
   const queryClient = useQueryClient();
-  const { data: staff, isLoading: staffLoading } = useStaff();
   const { data: orgSettings } = useOrganizationSettings();
-  const listStaffFn = useServerFn(listStaffUsers);
-  const createStaffFn = useServerFn(createStaffUser);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"cashier" | "admin" | "kitchen">("cashier");
-
-  const staffQuery = useQuery({
-    queryKey: ["staff-users"],
-    enabled: staff?.role === "admin",
-    queryFn: () => listStaffFn(),
+  const systemQuery = useQuery({
+    queryKey: ["system"],
+    queryFn: () => api.get<SystemInfo>("/system"),
   });
 
   const updateGst = useMutation({
-    mutationFn: async (gstEnabled: boolean) => {
-      const { error } = await supabase
-        .from("organization_settings")
-        .update({ gst_enabled: gstEnabled, updated_at: new Date().toISOString() })
-        .eq("id", 1);
-      if (error) throw error;
-    },
+    mutationFn: (gstEnabled: boolean) => api.put("/settings", { gst_enabled: gstEnabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organization-settings"] });
       toast.success("GST setting saved");
     },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Could not save";
-      if (message.includes("organization_settings")) {
-        toast.error("Run the latest database migration first (organization_settings).");
-        return;
-      }
-      toast.error(message);
-    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save"),
   });
 
-  const addStaff = useMutation({
-    mutationFn: async () =>
-      createStaffFn({
-        data: { email: email.trim(), password, role },
-      }),
-    onSuccess: () => {
-      setEmail("");
-      setPassword("");
-      setRole("cashier");
-      queryClient.invalidateQueries({ queryKey: ["staff-users"] });
-      toast.success("Staff account created");
+  const backupNow = useMutation({
+    mutationFn: () => api.post<{ file: string }>("/system/backup"),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["system"] });
+      toast.success("Backup saved", { description: result.file });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not create"),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Backup failed"),
   });
-
-  if (staffLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <AppHeader />
-        <p className="p-8 text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  if (staff?.role !== "admin") {
-    return <Navigate to="/dashboard" />;
-  }
 
   const gstEnabled = orgSettings?.gst_enabled ?? false;
-  const staffList = staffQuery.data ?? [];
+  const system = systemQuery.data;
 
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-        <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="mt-1 text-muted-foreground">Signed in as {staff.email} · Admin</p>
-        </div>
+        <h1 className="text-3xl font-bold">Settings</h1>
 
         <Card className="space-y-4 p-5">
           <div>
@@ -136,81 +89,47 @@ function SettingsPage() {
           </div>
         </Card>
 
+        <WaiterPhonesCard />
+
         <Card className="space-y-4 p-5">
           <div>
-            <h2 className="text-xl font-bold">Staff accounts</h2>
+            <h2 className="text-xl font-bold">Data &amp; backups</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create login credentials for cashiers and kitchen staff. They use the staff
-              sign-in page — public sign-up is disabled once an admin exists.
+              Everything is stored on this computer — no internet needed. A backup copy is saved
+              automatically once a day, and the last 30 days are kept.
             </p>
           </div>
-
-          <div className="space-y-3 rounded-lg border border-border p-4">
-            <div className="space-y-2">
-              <Label htmlFor="staffEmail">Email</Label>
-              <Input
-                id="staffEmail"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-11"
-                placeholder="cashier@example.com"
-              />
+          <div className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm">
+            <HardDrive className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 space-y-1">
+              <p>
+                <span className="text-muted-foreground">Database:</span>{" "}
+                <span className="break-all font-medium">{system?.dbPath ?? "…"}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Backups:</span>{" "}
+                <span className="break-all font-medium">{system?.backupDir ?? "…"}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Last backup:</span>{" "}
+                {system?.lastBackup
+                  ? new Date(system.lastBackup).toLocaleString("en-IN")
+                  : "Not yet"}
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="staffPassword">Password</Label>
-              <Input
-                id="staffPassword"
-                type="password"
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
-                placeholder="At least 6 characters"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as "cashier" | "admin" | "kitchen")}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cashier">Cashier</SelectItem>
-                  <SelectItem value="kitchen">Kitchen</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              className="h-11 w-full"
-              disabled={addStaff.isPending || !email.trim() || password.length < 6}
-              onClick={() => addStaff.mutate()}
-            >
-              Create staff account
-            </Button>
           </div>
-
-          <div className="space-y-2">
-            <h3 className="font-semibold">Current staff</h3>
-            <ul className="divide-y divide-border rounded-lg border border-border">
-              {staffList.map((member) => (
-                <li key={member.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                  <span>{member.email}</span>
-                  <span className="capitalize text-muted-foreground">{member.role ?? "—"}</span>
-                </li>
-              ))}
-              {staffQuery.isLoading && (
-                <li className="px-4 py-3 text-sm text-muted-foreground">Loading staff…</li>
-              )}
-              {!staffQuery.isLoading && staffList.length === 0 && (
-                <li className="px-4 py-3 text-sm text-muted-foreground">No staff accounts yet.</li>
-              )}
-            </ul>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Tip: copy the backups folder to a pen drive or Google Drive now and then, so the data
+            survives even if this computer breaks.
+          </p>
+          <Button
+            variant="outline"
+            className="h-11"
+            disabled={backupNow.isPending}
+            onClick={() => backupNow.mutate()}
+          >
+            Back up now
+          </Button>
         </Card>
 
         <Button asChild variant="outline" className="h-11">

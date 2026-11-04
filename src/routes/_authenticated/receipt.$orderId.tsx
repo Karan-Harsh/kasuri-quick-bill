@@ -2,9 +2,32 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { ArrowLeft, Printer } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { inr, orderTypeLabel, paymentLabel } from "@/lib/kasuri";
+
+interface ReceiptOrder {
+  id: string;
+  bill_number: number;
+  order_type: string;
+  status: string;
+  discount: number;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  payment_method: string | null;
+  created_at: string;
+  completed_at: string | null;
+  restaurant_tables: { label: string } | null;
+  order_items: {
+    id: string;
+    item_name: string;
+    unit_price: number;
+    tax_rate: number;
+    quantity: number;
+    created_at: string;
+  }[];
+}
 
 export const Route = createFileRoute("/_authenticated/receipt/$orderId")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -29,15 +52,7 @@ function Receipt() {
 
   const orderQuery = useQuery({
     queryKey: ["receipt", orderId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*, restaurant_tables(label), order_items(*)")
-        .eq("id", orderId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<ReceiptOrder>(`/orders/${orderId}/receipt`),
   });
 
   const order = orderQuery.data;

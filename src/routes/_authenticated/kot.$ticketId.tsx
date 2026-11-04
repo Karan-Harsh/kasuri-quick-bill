@@ -2,10 +2,25 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { ArrowLeft, Printer } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { formatKitchenTime, kitchenLocationLabel } from "@/lib/kitchen";
 import { orderTypeLabel } from "@/lib/kasuri";
+
+interface KotTicket {
+  id: string;
+  kot_number: number;
+  status: string;
+  sent_at: string;
+  completed_at: string | null;
+  order_id: string;
+  orders: {
+    bill_number: number;
+    order_type: string;
+    restaurant_tables: { label: string } | null;
+  } | null;
+  order_items: { id: string; item_name: string; quantity: number }[];
+}
 
 export const Route = createFileRoute("/_authenticated/kot/$ticketId")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -28,17 +43,7 @@ function KotPrint() {
 
   const ticketQuery = useQuery({
     queryKey: ["kot", ticketId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("kitchen_tickets")
-        .select(
-          "*, orders(bill_number, order_type, restaurant_tables(label)), order_items!order_items_kitchen_ticket_id_fkey(id, item_name, quantity)",
-        )
-        .eq("id", ticketId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<KotTicket>(`/kitchen/tickets/${ticketId}`),
   });
 
   const ticket = ticketQuery.data;

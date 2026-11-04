@@ -5,13 +5,15 @@ import {
   createRootRouteWithContext,
   useRouter,
   HeadContent,
-  Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
 
-import appCss from "../styles.css?url";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { api, useLiveUpdates, type AppSettings } from "@/lib/api";
+import { playKitchenAlert } from "@/lib/kitchen";
+import { printKotInBackground } from "@/lib/print-kot";
 
 function NotFoundComponent() {
   return (
@@ -97,58 +99,60 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&display=swap",
-      },
-    ],
+    links: [{ rel: "icon", href: "/favicon.ico", type: "image/x-icon" }],
   }),
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
 
-function RootShell({ children }: { children: ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
-
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const router = useRouter();
-
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
-    });
-    return () => data.subscription.unsubscribe();
-  }, [router, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
+      <HeadContent />
+      <LiveUpdates />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster richColors position="top-center" />
     </QueryClientProvider>
+  );
+}
+
+/**
+ * Keeps screens in sync with the local server and warns if it stops responding.
+ * When a waiter sends an order from a phone: chime, pop-up, and (if turned on) print the KOT here.
+ */
+function LiveUpdates() {
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: () => api.get<AppSettings>("/app-settings"),
+  });
+  const connected = useLiveUpdates((kot) => {
+    playKitchenAlert();
+    const where = kot.table_label ? `Table ${kot.table_label}` : `Bill #${kot.bill_number}`;
+    toast.success(`${where} · order from ${kot.waiter}`, {
+      description: `KOT #${kot.kot_number} sent to the kitchen`,
+      duration: 8000,
+    });
+    if (appSettings?.auto_print_waiter_kot ?? true) printKotInBackground(kot.ticket_id);
+  });
+
+  // Only warn if the connection stays down; brief drops (e.g. switching waiter phones on) reconnect by themselves.
+  const [showWarning, setShowWarning] = useState(false);
+  useEffect(() => {
+    if (connected) {
+      setShowWarning(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowWarning(true), 3000);
+    return () => clearTimeout(timer);
+  }, [connected]);
+  if (!showWarning) return null;
+  return (
+    <div className="no-print fixed inset-x-0 top-0 z-50 bg-destructive px-4 py-2 text-center text-sm font-semibold text-destructive-foreground">
+      Lost connection to the Kasuri server. Reconnecting…
+    </div>
   );
 }

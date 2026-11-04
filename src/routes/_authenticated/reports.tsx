@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -64,36 +64,20 @@ function Reports() {
 
   const reportQuery = useQuery({
     queryKey: ["reports", fromIso, toIso],
-    queryFn: async () => {
-      const { data: orders, error } = await supabase
-        .from("orders")
-        .select("id, order_type, payment_method, subtotal, discount, tax_amount, total, completed_at")
-        .eq("status", "COMPLETED")
-        .gte("completed_at", fromIso)
-        .lte("completed_at", toIso)
-        .order("completed_at", { ascending: false });
-      if (error) throw error;
-
-      const ids = orders.map((order) => order.id);
-      let lines: {
-        item_name: string;
-        quantity: number;
-        unit_price: number;
-      }[] = [];
-      if (ids.length > 0) {
-        const { data: itemRows, error: itemError } = await supabase
-          .from("order_items")
-          .select("item_name, quantity, unit_price")
-          .in("order_id", ids);
-        if (itemError) throw itemError;
-        lines = itemRows.map((row) => ({
-          item_name: row.item_name,
-          quantity: row.quantity,
-          unit_price: Number(row.unit_price),
-        }));
-      }
-      return { orders, lines };
-    },
+    queryFn: () =>
+      api.get<{
+        orders: {
+          id: string;
+          order_type: string;
+          payment_method: string | null;
+          subtotal: number;
+          discount: number;
+          tax_amount: number;
+          total: number;
+          completed_at: string | null;
+        }[];
+        lines: { item_name: string; quantity: number; unit_price: number }[];
+      }>(`/reports?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`),
   });
 
   const orders = reportQuery.data?.orders ?? [];

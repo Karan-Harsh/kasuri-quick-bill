@@ -1,0 +1,4 @@
+/target/
+/gen/schemas
+# Built by `bun run build:server`
+/binaries/

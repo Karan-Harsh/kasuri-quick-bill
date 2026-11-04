@@ -1,25 +1,11 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BookOpen, ChefHat, LayoutGrid, LogOut, Package, Settings } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Link } from "@tanstack/react-router";
+import { BarChart3, BookOpen, ChefHat, LayoutGrid, Package, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/hooks/useStaff";
 
 export function AppHeader() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { data: staff } = useStaff();
   const isKitchen = staff?.role === "kitchen";
-
-  async function signOut() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  }
-
-  const roleLabel =
-    staff?.role === "admin" ? "Admin" : staff?.role === "kitchen" ? "Kitchen" : "Cashier";
 
   return (
     <header className="no-print sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
@@ -76,15 +62,6 @@ export function AppHeader() {
             </>
           )}
         </nav>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span className="hidden sm:inline">
-            {staff?.email}
-            {staff?.role ? ` · ${roleLabel}` : ""}
-          </span>
-          <Button variant="outline" className="h-11" onClick={signOut}>
-            <LogOut className="mr-2 size-4" /> Sign out
-          </Button>
-        </div>
       </div>
     </header>
   );

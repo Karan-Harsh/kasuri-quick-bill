@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, ChefHat } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,33 +41,7 @@ function KitchenScreen() {
   const ticketsQuery = useQuery({
     queryKey: ["kitchen-tickets", "open"],
     refetchInterval: 15_000,
-    queryFn: async (): Promise<KitchenTicketSummary[]> => {
-      const { data, error } = await supabase
-        .from("kitchen_tickets")
-        .select(
-          "id, kot_number, status, sent_at, completed_at, order_id, orders(bill_number, order_type, restaurant_tables(label)), order_items!order_items_kitchen_ticket_id_fkey(id, item_name, quantity)",
-        )
-        .eq("status", "OPEN")
-        .order("sent_at", { ascending: true });
-      if (error) throw error;
-
-      return (data ?? []).map((row) => ({
-        id: row.id,
-        kot_number: row.kot_number,
-        status: row.status as KitchenTicketSummary["status"],
-        sent_at: row.sent_at,
-        completed_at: row.completed_at,
-        order_id: row.order_id,
-        bill_number: row.orders?.bill_number ?? 0,
-        order_type: row.orders?.order_type ?? "DINE_IN",
-        table_label: row.orders?.restaurant_tables?.label ?? null,
-        lines: (row.order_items ?? []).map((line) => ({
-          id: line.id,
-          item_name: line.item_name,
-          quantity: line.quantity,
-        })),
-      }));
-    },
+    queryFn: () => api.get<KitchenTicketSummary[]>("/kitchen/tickets"),
   });
 
   useEffect(() => {
@@ -93,37 +67,8 @@ function KitchenScreen() {
     }
   }, [ticketsQuery.data]);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("kitchen-board")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "kitchen_tickets" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["kitchen-tickets", "open"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "order_items" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["kitchen-tickets", "open"] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
   const markDone = useMutation({
-    mutationFn: async (ticketId: string) => {
-      const { error } = await supabase.rpc("complete_kitchen_ticket", {
-        p_ticket_id: ticketId,
-      });
-      if (error) throw error;
-    },
+    mutationFn: (ticketId: string) => api.post(`/kitchen/tickets/${ticketId}/complete`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kitchen-tickets", "open"] });
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
@@ -187,6 +132,7 @@ function KitchenScreen() {
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Sent {formatKitchenTime(ticket.sent_at)} · Bill #{ticket.bill_number}
+                      {ticket.sent_by ? ` · by ${ticket.sent_by}` : ""}
                     </p>
                   </div>
                 </div>

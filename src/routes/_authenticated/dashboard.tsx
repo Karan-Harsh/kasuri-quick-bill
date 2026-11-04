@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { ShoppingBag, Utensils } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,77 +41,34 @@ function Dashboard() {
 
   const tablesQuery = useQuery({
     queryKey: ["tables"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("restaurant_tables")
-        .select("id, table_number, label")
-        .order("table_number");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<{ id: string; table_number: number; label: string }[]>("/tables"),
   });
 
   const openOrdersQuery = useQuery({
     queryKey: ["open-orders"],
     refetchInterval: 20_000,
-    queryFn: async () => {
-      const [{ data: orders, error: ordersError }, { data: openTickets, error: ticketsError }] =
-        await Promise.all([
-          supabase
-            .from("orders")
-            .select(
-              "id, table_id, order_type, bill_number, created_at, kitchen_ready_at, order_items(unit_price, tax_rate, quantity, kitchen_sent_at)",
-            )
-            .eq("status", "OPEN")
-            .order("created_at"),
-          supabase.from("kitchen_tickets").select("order_id").eq("status", "OPEN"),
-        ]);
-      if (ordersError) throw ordersError;
-      if (ticketsError) throw ticketsError;
-
-      const openTicketCount = new Map<string, number>();
-      for (const ticket of openTickets ?? []) {
-        openTicketCount.set(ticket.order_id, (openTicketCount.get(ticket.order_id) ?? 0) + 1);
-      }
-
-      return (orders ?? []).map((order) => ({
-        ...order,
-        open_ticket_count: openTicketCount.get(order.id) ?? 0,
-      }));
-    },
+    queryFn: () =>
+      api.get<
+        {
+          id: string;
+          table_id: string | null;
+          order_type: string;
+          bill_number: number;
+          created_at: string;
+          kitchen_ready_at: string | null;
+          open_ticket_count: number;
+          order_items: {
+            unit_price: number;
+            tax_rate: number;
+            quantity: number;
+            kitchen_sent_at: string | null;
+          }[];
+        }[]
+      >("/orders/open"),
   });
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("dashboard-kitchen")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["open-orders"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "kitchen_tickets" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["open-orders"] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
   const acknowledgeReady = useMutation({
-    mutationFn: async (orderId: string) => {
-      const { error } = await supabase.rpc("acknowledge_kitchen_ready", {
-        p_order_id: orderId,
-      });
-      if (error) throw error;
-    },
+    mutationFn: (orderId: string) => api.post(`/orders/${orderId}/acknowledge-ready`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
       toast.success("Marked as served");
@@ -123,34 +80,15 @@ function Dashboard() {
   const todayQuery = useQuery({
     queryKey: ["today-stats"],
     refetchInterval: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_type, total")
-        .eq("status", "COMPLETED")
-        .gte("completed_at", startOfToday());
-      if (error) throw error;
-      const sales = data.reduce((sum, order) => sum + Number(order.total), 0);
-      const parcels = data.filter((order) => order.order_type === "PARCEL").length;
-      return { sales, orders: data.length, parcels };
-    },
+    queryFn: () =>
+      api.get<{ sales: number; orders: number; parcels: number }>(
+        `/stats/today?from=${encodeURIComponent(startOfToday())}`,
+      ),
   });
 
   const startOrder = useMutation({
-    mutationFn: async (input: { tableId: string | null }) => {
-      const { data: userData } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from("orders")
-        .insert({
-          order_type: input.tableId ? "DINE_IN" : "PARCEL",
-          table_id: input.tableId,
-          created_by: userData.user?.id ?? null,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-      return data.id;
-    },
+    mutationFn: async (input: { tableId: string | null }) =>
+      (await api.post<{ id: string }>("/orders", { table_id: input.tableId })).id,
     onSuccess: (orderId) => {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
       navigate({ to: "/order/$orderId", params: { orderId } });

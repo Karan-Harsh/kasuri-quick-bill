@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { History, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -78,27 +78,34 @@ function InventoryPage() {
 
   const itemsQuery = useQuery({
     queryKey: ["inventory-items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory_items")
-        .select("id, name, unit, current_quantity, is_active, updated_at")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      api.get<
+        {
+          id: string;
+          name: string;
+          unit: string;
+          current_quantity: number;
+          is_active: boolean;
+          updated_at: string;
+        }[]
+      >("/inventory/items"),
   });
 
   const movementsQuery = useQuery({
     queryKey: ["inventory-movements"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory_movements")
-        .select("id, item_id, movement_type, quantity_change, quantity_after, note, created_at, inventory_items(name, unit)")
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      api.get<
+        {
+          id: string;
+          item_id: string;
+          movement_type: InventoryMovementType;
+          quantity_change: number;
+          quantity_after: number;
+          note: string | null;
+          created_at: string;
+          inventory_items: { name: string; unit: string } | null;
+        }[]
+      >("/inventory/movements?limit=30"),
   });
 
   const invalidate = () => {
@@ -113,40 +120,9 @@ function InventoryPage() {
       if (!name) throw new Error("Item name is required");
       if (Number.isNaN(qty) || qty < 0) throw new Error("Starting quantity must be zero or more");
 
-      if (input.id) {
-        const { error } = await supabase
-          .from("inventory_items")
-          .update({
-            name,
-            unit: input.unit,
-            is_active: input.is_active,
-          })
-          .eq("id", input.id);
-        if (error) throw error;
-        return;
-      }
-
-      const { data: created, error } = await supabase
-        .from("inventory_items")
-        .insert({
-          name,
-          unit: input.unit,
-          current_quantity: 0,
-          is_active: input.is_active,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      if (qty > 0) {
-        const { error: moveError } = await supabase.rpc("record_inventory_movement", {
-          p_item_id: created.id,
-          p_movement_type: "count",
-          p_quantity: qty,
-          p_note: "Opening stock",
-        });
-        if (moveError) throw moveError;
-      }
+      const payload = { name, unit: input.unit, is_active: input.is_active };
+      if (input.id) await api.put(`/inventory/items/${input.id}`, payload);
+      else await api.post("/inventory/items", { ...payload, opening_quantity: qty });
     },
     onSuccess: () => {
       invalidate();
@@ -157,26 +133,18 @@ function InventoryPage() {
   });
 
   const toggleActive = useMutation({
-    mutationFn: async (input: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("inventory_items")
-        .update({ is_active: input.is_active })
-        .eq("id", input.id);
-      if (error) throw error;
-    },
+    mutationFn: (input: { id: string; is_active: boolean }) =>
+      api.patch(`/inventory/items/${input.id}/active`, { is_active: input.is_active }),
     onSuccess: invalidate,
   });
 
   const recordMovement = useMutation({
-    mutationFn: async (input: MovementDialog & { quantity: number; note: string }) => {
-      const { error } = await supabase.rpc("record_inventory_movement", {
-        p_item_id: input.itemId,
-        p_movement_type: input.type,
-        p_quantity: input.quantity,
-        p_note: input.note || null,
-      });
-      if (error) throw error;
-    },
+    mutationFn: (input: MovementDialog & { quantity: number; note: string }) =>
+      api.post(`/inventory/items/${input.itemId}/movements`, {
+        type: input.type,
+        quantity: input.quantity,
+        note: input.note || null,
+      }),
     onSuccess: () => {
       invalidate();
       setMovement(null);
