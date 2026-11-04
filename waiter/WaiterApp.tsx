@@ -74,9 +74,7 @@ export function WaiterApp() {
     );
   }
 
-  return (
-    <Paired unpair={unpair} openOrderId={openOrderId} setOpenOrderId={setOpenOrderId} />
-  );
+  return <Paired unpair={unpair} openOrderId={openOrderId} setOpenOrderId={setOpenOrderId} />;
 }
 
 function Paired({
@@ -109,7 +107,12 @@ function Paired({
         </div>
       )}
       {openOrderId ? (
-        <OrderScreen orderId={openOrderId} connected={connected} onBack={() => setOpenOrderId(null)} onUnpaired={unpair} />
+        <OrderScreen
+          orderId={openOrderId}
+          connected={connected}
+          onBack={() => setOpenOrderId(null)}
+          onUnpaired={unpair}
+        />
       ) : (
         <TablesScreen onOpen={setOpenOrderId} onUnpaired={unpair} />
       )}
@@ -126,7 +129,10 @@ function PairScreen({ reason, onPaired }: { reason: string | null; onPaired: () 
 
   const pair = useMutation({
     mutationFn: () =>
-      api.post<{ token: string; device: { name: string } }>("/devices/pair", { code: code.trim(), name: name.trim() }),
+      api.post<{ token: string; device: { name: string } }>("/devices/pair", {
+        code: code.trim(),
+        name: name.trim(),
+      }),
     onSuccess: ({ token, device }) => {
       session.save(token, device.name);
       history.replaceState(null, "", location.pathname);
@@ -152,7 +158,13 @@ function PairScreen({ reason, onPaired }: { reason: string | null; onPaired: () 
       >
         <label className="block space-y-1.5">
           <span className="text-sm font-semibold">Your name</span>
-          <Input className="h-14 text-lg" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ramesh" autoFocus={!name} />
+          <Input
+            className="h-14 text-lg"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Ramesh"
+            autoFocus={!name}
+          />
         </label>
         <label className="block space-y-1.5">
           <span className="text-sm font-semibold">Code shown on the counter</span>
@@ -165,7 +177,11 @@ function PairScreen({ reason, onPaired }: { reason: string | null; onPaired: () 
             placeholder="000000"
           />
         </label>
-        <Button type="submit" className="h-14 w-full text-lg" disabled={pair.isPending || code.length !== 6 || !name.trim()}>
+        <Button
+          type="submit"
+          className="h-14 w-full text-lg"
+          disabled={pair.isPending || code.length !== 6 || !name.trim()}
+        >
           Connect this phone
         </Button>
       </form>
@@ -178,8 +194,17 @@ function PairScreen({ reason, onPaired }: { reason: string | null; onPaired: () 
 
 // ---------- tables ----------
 
-function TablesScreen({ onOpen, onUnpaired }: { onOpen: (orderId: string) => void; onUnpaired: (r?: string) => void }) {
-  const tablesQuery = useQuery({ queryKey: ["tables"], queryFn: () => api.get<Table[]>("/tables") });
+function TablesScreen({
+  onOpen,
+  onUnpaired,
+}: {
+  onOpen: (orderId: string) => void;
+  onUnpaired: (r?: string) => void;
+}) {
+  const tablesQuery = useQuery({
+    queryKey: ["tables"],
+    queryFn: () => api.get<Table[]>("/tables"),
+  });
   const ordersQuery = useQuery({
     queryKey: ["open-orders"],
     queryFn: () => api.get<OpenOrder[]>("/orders/open"),
@@ -189,7 +214,8 @@ function TablesScreen({ onOpen, onUnpaired }: { onOpen: (orderId: string) => voi
   const startOrder = useMutation({
     mutationFn: (tableId: string) => api.post<{ id: string }>("/orders", { table_id: tableId }),
     onSuccess: ({ id }) => onOpen(id),
-    onError: (e) => (e instanceof NotPairedError ? onUnpaired(e.message) : toast.error(errorText(e))),
+    onError: (e) =>
+      e instanceof NotPairedError ? onUnpaired(e.message) : toast.error(errorText(e)),
   });
 
   const orders = ordersQuery.data ?? [];
@@ -198,7 +224,9 @@ function TablesScreen({ onOpen, onUnpaired }: { onOpen: (orderId: string) => voi
     <>
       <header className="flex items-center justify-between px-4 pt-5 pb-3">
         <h1 className="text-2xl font-extrabold">Tables</h1>
-        <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">{session.name()}</span>
+        <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
+          {session.name()}
+        </span>
       </header>
       <div className="grid grid-cols-2 gap-3 px-4">
         {(tablesQuery.data ?? []).map((table) => {
@@ -237,7 +265,9 @@ function TablesScreen({ onOpen, onUnpaired }: { onOpen: (orderId: string) => voi
           );
         })}
       </div>
-      {tablesQuery.isLoading && <p className="p-6 text-center text-muted-foreground">Loading tables…</p>}
+      {tablesQuery.isLoading && (
+        <p className="p-6 text-center text-muted-foreground">Loading tables…</p>
+      )}
     </>
   );
 }
@@ -277,19 +307,33 @@ function OrderScreen({
   const [pending, setPending] = usePendingTaps(orderId);
   const [flushing, setFlushing] = useState(false);
 
-  const orderQuery = useQuery({ queryKey: ["order", orderId], queryFn: () => api.get<Order>(`/orders/${orderId}`) });
-  const linesQuery = useQuery({ queryKey: ["order-items", orderId], queryFn: () => api.get<Line[]>(`/orders/${orderId}/items`) });
-  const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: () => api.get<Category[]>("/categories") });
-  const menuQuery = useQuery({ queryKey: ["menu-items"], queryFn: () => api.get<MenuItem[]>("/menu-items") });
+  const orderQuery = useQuery({
+    queryKey: ["order", orderId],
+    queryFn: () => api.get<Order>(`/orders/${orderId}`),
+  });
+  const linesQuery = useQuery({
+    queryKey: ["order-items", orderId],
+    queryFn: () => api.get<Line[]>(`/orders/${orderId}/items`),
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api.get<Category[]>("/categories"),
+  });
+  const menuQuery = useQuery({
+    queryKey: ["menu-items"],
+    queryFn: () => api.get<MenuItem[]>("/menu-items"),
+  });
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["order-items", orderId] });
     queryClient.invalidateQueries({ queryKey: ["open-orders"] });
   };
-  const fail = (e: unknown) => (e instanceof NotPairedError ? onUnpaired(e.message) : toast.error(errorText(e)));
+  const fail = (e: unknown) =>
+    e instanceof NotPairedError ? onUnpaired(e.message) : toast.error(errorText(e));
 
   const addItem = useMutation({
-    mutationFn: (menuItemId: string) => api.post(`/orders/${orderId}/items`, { menu_item_id: menuItemId }),
+    mutationFn: (menuItemId: string) =>
+      api.post(`/orders/${orderId}/items`, { menu_item_id: menuItemId }),
     onSuccess: refresh,
     onError: (e, menuItemId) => {
       if (e instanceof OfflineError) setPending((p) => [...p, menuItemId]);
@@ -298,7 +342,8 @@ function OrderScreen({
   });
 
   const changeQty = useMutation({
-    mutationFn: (input: { id: string; quantity: number }) => api.patch(`/order-items/${input.id}`, { quantity: input.quantity }),
+    mutationFn: (input: { id: string; quantity: number }) =>
+      api.patch(`/order-items/${input.id}`, { quantity: input.quantity }),
     onSuccess: refresh,
     onError: fail,
   });
@@ -376,7 +421,13 @@ function OrderScreen({
   return (
     <>
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur">
-        <Button variant="ghost" size="icon" className="size-11" onClick={onBack} aria-label="Back to tables">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11"
+          onClick={onBack}
+          aria-label="Back to tables"
+        >
           <ArrowLeft className="size-6" />
         </Button>
         <div>
@@ -387,7 +438,6 @@ function OrderScreen({
         </div>
       </header>
 
-
       {/* Menu */}
       <nav className="sticky top-[69px] z-10 mt-2 flex gap-2 overflow-x-auto bg-background px-4 py-2">
         {categories.map((c) => (
@@ -397,7 +447,9 @@ function OrderScreen({
             onClick={() => setCategory(c.id)}
             className={[
               "h-11 shrink-0 rounded-full border px-4 font-semibold",
-              c.id === activeCategory ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card",
+              c.id === activeCategory
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card",
             ].join(" ")}
           >
             {c.name}
@@ -409,7 +461,8 @@ function OrderScreen({
           .filter((m) => m.category_id === activeCategory)
           .map((m) => {
             const inOrder =
-              (unsent.find((l) => l.menu_item_id === m.id)?.quantity ?? 0) + (pendingCounts.get(m.id) ?? 0);
+              (unsent.find((l) => l.menu_item_id === m.id)?.quantity ?? 0) +
+              (pendingCounts.get(m.id) ?? 0);
             return (
               <button
                 key={m.id}
@@ -447,7 +500,9 @@ function OrderScreen({
 
         {(unsent.length > 0 || pending.length > 0) && (
           <div className="rounded-xl border-2 border-primary/40 p-3">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-primary">New — not sent yet</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-primary">
+              New — not sent yet
+            </p>
             {unsent.map((l) => (
               <div key={l.id} className="flex items-center justify-between gap-2 py-1">
                 <span className="font-semibold">{l.item_name}</span>
@@ -497,14 +552,20 @@ function OrderScreen({
         {order?.kitchen_ready_at && (
           <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50 p-3">
             <p className="font-bold text-emerald-800">Food is ready to serve</p>
-            <Button className="h-11 bg-emerald-600 hover:bg-emerald-700" disabled={markServed.isPending} onClick={() => markServed.mutate()}>
+            <Button
+              className="h-11 bg-emerald-600 hover:bg-emerald-700"
+              disabled={markServed.isPending}
+              onClick={() => markServed.mutate()}
+            >
               <Check className="mr-1 size-4" /> Served
             </Button>
           </div>
         )}
         <Button
           className="h-16 w-full text-xl font-bold"
-          disabled={!connected || unsentCount === 0 || pending.length > 0 || sendToKitchen.isPending}
+          disabled={
+            !connected || unsentCount === 0 || pending.length > 0 || sendToKitchen.isPending
+          }
           onClick={() => sendToKitchen.mutate()}
         >
           <ChefHat className="mr-2 size-6" />

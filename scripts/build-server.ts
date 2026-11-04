@@ -6,7 +6,7 @@
 import { $ } from "bun";
 
 const TARGETS = {
-  "windows": { bun: "bun-windows-x64", triple: "x86_64-pc-windows-msvc", ext: ".exe" },
+  windows: { bun: "bun-windows-x64", triple: "x86_64-pc-windows-msvc", ext: ".exe" },
   "win32-x64": { bun: "bun-windows-x64", triple: "x86_64-pc-windows-msvc", ext: ".exe" },
   "darwin-arm64": { bun: "bun-darwin-arm64", triple: "aarch64-apple-darwin", ext: "" },
   "darwin-x64": { bun: "bun-darwin-x64", triple: "x86_64-apple-darwin", ext: "" },

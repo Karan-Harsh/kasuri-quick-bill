@@ -3,8 +3,10 @@ import { openDatabase } from "./db";
 import { Store } from "./store";
 
 let store: Store;
-const menuItem = (name: string) => store.menuItems(false).find((m) => m.name === name)! as { id: string; price: number };
-const tableId = (label: string) => (store.tables() as { id: string; label: string }[]).find((t) => t.label === label)!.id;
+const menuItem = (name: string) =>
+  store.menuItems(false).find((m) => m.name === name)! as { id: string; price: number };
+const tableId = (label: string) =>
+  (store.tables() as { id: string; label: string }[]).find((t) => t.label === label)!.id;
 
 beforeEach(() => {
   store = new Store(openDatabase(":memory:"));
@@ -87,7 +89,9 @@ describe("kitchen", () => {
     // One more naan after sending: goes on a new line, so KOT 2 shows just 1.
     store.addItem(o.id, naan.id);
     const kot2 = store.sendToKitchen(o.id);
-    expect(store.ticket(kot2.id).order_items).toEqual([expect.objectContaining({ item_name: "Butter Naan", quantity: 1 })]);
+    expect(store.ticket(kot2.id).order_items).toEqual([
+      expect.objectContaining({ item_name: "Butter Naan", quantity: 1 }),
+    ]);
     expect(store.openTickets()).toHaveLength(2);
 
     store.completeTicket(kot1.id);
@@ -118,21 +122,34 @@ describe("kitchen", () => {
     store.addItem(o.id, menuItem("Chicken 65").id);
     store.sendToKitchen(o.id);
     const [t] = store.openTickets() as Record<string, unknown>[];
-    expect(t).toMatchObject({ table_label: "T5", order_type: "DINE_IN", bill_number: 1001, status: "OPEN" });
+    expect(t).toMatchObject({
+      table_label: "T5",
+      order_type: "DINE_IN",
+      bill_number: 1001,
+      status: "OPEN",
+    });
     expect(t.lines).toEqual([expect.objectContaining({ item_name: "Chicken 65", quantity: 1 })]);
   });
 });
 
 describe("inventory", () => {
   test("opening stock, use, receive, count and no negative stock", () => {
-    const { id } = store.saveInventoryItem(null, { name: "Paneer", unit: "kg", opening_quantity: 5 });
+    const { id } = store.saveInventoryItem(null, {
+      name: "Paneer",
+      unit: "kg",
+      opening_quantity: 5,
+    });
     expect(store.recordMovement(id, "used", 1.5).current_quantity).toBe(3.5);
     expect(store.recordMovement(id, "received", 2).current_quantity).toBe(5.5);
     expect(store.recordMovement(id, "count", 4).current_quantity).toBe(4);
     expect(() => store.recordMovement(id, "used", 10)).toThrow("Not enough stock");
     const moves = store.inventoryMovements();
     expect(moves).toHaveLength(4);
-    expect(moves[0]).toMatchObject({ movement_type: "count", quantity_change: -1.5, inventory_items: { name: "Paneer", unit: "kg" } });
+    expect(moves[0]).toMatchObject({
+      movement_type: "count",
+      quantity_change: -1.5,
+      inventory_items: { name: "Paneer", unit: "kg" },
+    });
   });
 
   test("duplicate names are rejected", () => {
@@ -150,6 +167,10 @@ describe("reports", () => {
     const r = store.report("2000-01-01T00:00:00.000Z", "2999-01-01T00:00:00.000Z");
     expect(r.orders).toHaveLength(1);
     expect(r.lines).toEqual([{ item_name: "Garlic Naan", quantity: 1, unit_price: 60 }]);
-    expect(store.todayStats("2000-01-01T00:00:00.000Z")).toEqual({ sales: 60, orders: 1, parcels: 1 });
+    expect(store.todayStats("2000-01-01T00:00:00.000Z")).toEqual({
+      sales: 60,
+      orders: 1,
+      parcels: 1,
+    });
   });
 });

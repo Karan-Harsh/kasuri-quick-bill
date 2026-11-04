@@ -29,19 +29,11 @@ interface ReceiptOrder {
   }[];
 }
 
-export const Route = createFileRoute("/_authenticated/receipt/$orderId")({
+export const Route = createFileRoute("/receipt/$orderId")({
   validateSearch: (search: Record<string, unknown>) => ({
     print: search["print"] === "1" || search["print"] === true,
   }),
-  head: () => ({
-    meta: [
-      { title: "Receipt — Kasuri" },
-      { name: "description", content: "Printable GST invoice for a Kasuri bill." },
-      { property: "og:title", content: "Receipt — Kasuri" },
-      { property: "og:description", content: "Printable GST invoice for a Kasuri bill." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "Receipt — Kasuri" }] }),
   component: Receipt,
 });
 
@@ -74,9 +66,7 @@ function Receipt() {
     );
   }
 
-  const lines = [...order.order_items].sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  );
+  const lines = [...order.order_items].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const created = new Date(order.completed_at ?? order.created_at);
   const showGst = Number(order.tax_amount) > 0;
 
@@ -105,12 +95,10 @@ function Receipt() {
             <strong>#{order.bill_number}</strong>
           </p>
           <p className="text-right">
-            <span className="text-muted-foreground">Date:</span>{" "}
-            {created.toLocaleString("en-IN")}
+            <span className="text-muted-foreground">Date:</span> {created.toLocaleString("en-IN")}
           </p>
           <p>
-            <span className="text-muted-foreground">Type:</span>{" "}
-            {orderTypeLabel(order.order_type)}
+            <span className="text-muted-foreground">Type:</span> {orderTypeLabel(order.order_type)}
             {order.restaurant_tables?.label ? ` · Table ${order.restaurant_tables.label}` : ""}
           </p>
           <p className="text-right">
@@ -136,9 +124,7 @@ function Receipt() {
                 <td className="py-2 text-right">{inr(Number(line.unit_price))}</td>
                 <td className="py-2 text-right">{line.quantity}</td>
                 {showGst && <td className="py-2 text-right">{Number(line.tax_rate)}%</td>}
-                <td className="py-2 text-right">
-                  {inr(Number(line.unit_price) * line.quantity)}
-                </td>
+                <td className="py-2 text-right">{inr(Number(line.unit_price) * line.quantity)}</td>
               </tr>
             ))}
           </tbody>

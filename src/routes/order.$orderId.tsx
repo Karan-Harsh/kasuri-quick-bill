@@ -8,7 +8,13 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { computeTotals, inr, PAYMENT_METHODS, paymentLabel, type PaymentMethod } from "@/lib/kasuri";
+import {
+  computeTotals,
+  inr,
+  PAYMENT_METHODS,
+  paymentLabel,
+  type PaymentMethod,
+} from "@/lib/kasuri";
 import { printKotInBackground } from "@/lib/print-kot";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 
@@ -42,16 +48,8 @@ interface OrderLine {
   kitchen_sent_at: string | null;
 }
 
-export const Route = createFileRoute("/_authenticated/order/$orderId")({
-  head: () => ({
-    meta: [
-      { title: "Take order — Kasuri" },
-      { name: "description", content: "Add items and settle the bill at Kasuri." },
-      { property: "og:title", content: "Take order — Kasuri" },
-      { property: "og:description", content: "Add items and settle the bill at Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/order/$orderId")({
+  head: () => ({ meta: [{ title: "Take order — Kasuri" }] }),
   component: OrderScreen,
 });
 

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Smartphone, Trash2, Wifi, WifiOff } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,7 +51,10 @@ export function WaiterPhonesCard() {
   });
   const networkQuery = useQuery({
     queryKey: ["network"],
-    queryFn: () => api.get<{ port: number; addresses: string[]; waiter_app_available: boolean }>("/system/network"),
+    queryFn: () =>
+      api.get<{ port: number; addresses: string[]; waiter_app_available: boolean }>(
+        "/system/network",
+      ),
     refetchInterval: 30_000,
   });
 
@@ -67,7 +70,8 @@ export function WaiterPhonesCard() {
   const startPairing = useMutation({
     mutationFn: () => api.post<Pairing>("/devices/pairing"),
     onSuccess: setPairing,
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not start pairing"),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not start pairing"),
   });
 
   const removeDevice = useMutation({
@@ -79,7 +83,7 @@ export function WaiterPhonesCard() {
   });
 
   // Close the QR dialog as soon as a new phone shows up in the list.
-  const devices = devicesQuery.data ?? [];
+  const devices = useMemo(() => devicesQuery.data ?? [], [devicesQuery.data]);
   const deviceCountRef = useRef(devices.length);
   useEffect(() => {
     if (pairing && devices.length > deviceCountRef.current) {
@@ -154,7 +158,10 @@ export function WaiterPhonesCard() {
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border">
               {devices.map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <li
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                >
                   <div>
                     <p className="font-semibold">{d.name}</p>
                     <p className="text-muted-foreground">Last used {lastSeen(d.last_seen_at)}</p>
@@ -164,7 +171,11 @@ export function WaiterPhonesCard() {
                     size="sm"
                     disabled={removeDevice.isPending}
                     onClick={() => {
-                      if (window.confirm(`Remove ${d.name}? That phone will no longer be able to take orders.`)) {
+                      if (
+                        window.confirm(
+                          `Remove ${d.name}? That phone will no longer be able to take orders.`,
+                        )
+                      ) {
                         removeDevice.mutate(d.id);
                       }
                     }}
@@ -191,7 +202,9 @@ export function WaiterPhonesCard() {
             <Switch
               checked={autoPrint}
               disabled={updateSettings.isPending}
-              onCheckedChange={(checked) => updateSettings.mutate({ auto_print_waiter_kot: checked })}
+              onCheckedChange={(checked) =>
+                updateSettings.mutate({ auto_print_waiter_kot: checked })
+              }
             />
           </div>
         </>
@@ -213,7 +226,9 @@ function PairingDialog({ pairing, onClose }: { pairing: Pairing | null; onClose:
 
   useEffect(() => {
     if (!link) return;
-    QRCode.toString(link, { type: "svg", margin: 1, width: 260 }).then(setQrSvg, () => setQrSvg(""));
+    QRCode.toString(link, { type: "svg", margin: 1, width: 260 }).then(setQrSvg, () =>
+      setQrSvg(""),
+    );
   }, [link]);
 
   const pairPageUrl = link.replace(/#.*$/, "");
@@ -224,7 +239,8 @@ function PairingDialog({ pairing, onClose }: { pairing: Pairing | null; onClose:
         <DialogHeader>
           <DialogTitle>Add a waiter's phone</DialogTitle>
           <DialogDescription>
-            On the phone, connect to the restaurant Wi-Fi, open the camera and point it at this code.
+            On the phone, connect to the restaurant Wi-Fi, open the camera and point it at this
+            code.
           </DialogDescription>
         </DialogHeader>
         {pairing && (
@@ -234,18 +250,25 @@ function PairingDialog({ pairing, onClose }: { pairing: Pairing | null; onClose:
               dangerouslySetInnerHTML={{ __html: qrSvg }}
             />
             <div>
-              <p className="text-sm text-muted-foreground">No camera? Open this in the phone's browser:</p>
+              <p className="text-sm text-muted-foreground">
+                No camera? Open this in the phone's browser:
+              </p>
               <p className="font-semibold break-all">{pairPageUrl}</p>
               <p className="mt-2 text-sm text-muted-foreground">and enter the code</p>
               <p className="text-4xl font-extrabold tracking-[0.3em]">{pairing.code}</p>
             </div>
             {pairing.links.length > 1 && (
-              <Button variant="outline" size="sm" onClick={() => setLinkIndex((i) => (i + 1) % pairing.links.length)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLinkIndex((i) => (i + 1) % pairing.links.length)}
+              >
                 Phone can't connect? Try the other network address
               </Button>
             )}
             <p className="text-xs text-muted-foreground">
-              The code works once and expires in 10 minutes. This window closes when the phone is connected.
+              The code works once and expires in 10 minutes. This window closes when the phone is
+              connected.
             </p>
           </div>
         )}

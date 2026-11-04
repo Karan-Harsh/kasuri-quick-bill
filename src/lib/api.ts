@@ -74,7 +74,9 @@ export function useLiveUpdates(onWaiterKot?: (event: WaiterKotEvent) => void) {
     let stopped = false;
 
     const connect = () => {
-      const url = SERVER ? `${SERVER.replace(/^http/, "ws")}/ws` : `${location.origin.replace(/^http/, "ws")}/ws`;
+      const url = SERVER
+        ? `${SERVER.replace(/^http/, "ws")}/ws`
+        : `${location.origin.replace(/^http/, "ws")}/ws`;
       ws = new WebSocket(url);
       ws.onopen = () => {
         setConnected(true);
@@ -90,7 +92,8 @@ export function useLiveUpdates(onWaiterKot?: (event: WaiterKotEvent) => void) {
           }
           if (msg.type !== "changed") return;
           for (const topic of msg.topics ?? []) {
-            for (const queryKey of TOPIC_QUERIES[topic] ?? []) queryClient.invalidateQueries({ queryKey });
+            for (const queryKey of TOPIC_QUERIES[topic] ?? [])
+              queryClient.invalidateQueries({ queryKey });
           }
         } catch {
           // ignore malformed messages

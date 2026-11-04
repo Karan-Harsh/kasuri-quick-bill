@@ -34,8 +34,7 @@ export function computeTotals(
     lines.reduce((sum, line) => sum + Number(line.unit_price) * line.quantity, 0),
   );
   const rawTax = lines.reduce(
-    (sum, line) =>
-      sum + (Number(line.unit_price) * line.quantity * Number(line.tax_rate)) / 100,
+    (sum, line) => sum + (Number(line.unit_price) * line.quantity * Number(line.tax_rate)) / 100,
     0,
   );
   const discount = round2(Math.min(Math.max(discountInput || 0, 0), subtotal));

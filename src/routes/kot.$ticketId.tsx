@@ -22,17 +22,11 @@ interface KotTicket {
   order_items: { id: string; item_name: string; quantity: number }[];
 }
 
-export const Route = createFileRoute("/_authenticated/kot/$ticketId")({
+export const Route = createFileRoute("/kot/$ticketId")({
   validateSearch: (search: Record<string, unknown>) => ({
     print: search["print"] === "1" || search["print"] === true,
   }),
-  head: () => ({
-    meta: [
-      { title: "Kitchen order ticket — Kasuri" },
-      { name: "description", content: "Printable kitchen order ticket for Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "Kitchen order ticket — Kasuri" }] }),
   component: KotPrint,
 });
 
@@ -110,8 +104,7 @@ function KotPrint() {
             <span className="text-muted-foreground">Bill:</span> #{order?.bill_number}
           </p>
           <p>
-            <span className="text-muted-foreground">Time:</span>{" "}
-            {formatKitchenTime(ticket.sent_at)}
+            <span className="text-muted-foreground">Time:</span> {formatKitchenTime(ticket.sent_at)}
           </p>
         </div>
 

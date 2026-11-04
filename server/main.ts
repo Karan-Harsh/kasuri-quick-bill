@@ -46,7 +46,8 @@ function broadcast(event: ServerEvent, to: "counter" | "all" = "all") {
 
 function disconnectDevice(deviceId: string) {
   for (const ws of sockets) {
-    if (ws.data.client.kind === "waiter" && ws.data.client.device.id === deviceId) ws.close(4001, "Removed");
+    if (ws.data.client.kind === "waiter" && ws.data.client.device.id === deviceId)
+      ws.close(4001, "Removed");
   }
 }
 
@@ -119,7 +120,8 @@ function listen(waiterPhones: boolean) {
   const hostname = waiterPhones ? "0.0.0.0" : "127.0.0.1";
   if (server?.hostname === hostname) return;
   if (server) {
-    for (const ws of sockets) if (ws.data.client.kind === "waiter") ws.close(4002, "Waiter phones turned off");
+    for (const ws of sockets)
+      if (ws.data.client.kind === "waiter") ws.close(4002, "Waiter phones turned off");
     server.stop(true);
   }
   server = Bun.serve<{ client: Client }>({
@@ -130,7 +132,9 @@ function listen(waiterPhones: boolean) {
       if (new URL(req.url).pathname === "/ws") {
         const client = app.identifySocket(req, ip);
         if (!client) return new Response("Forbidden", { status: 403 });
-        return srv.upgrade(req, { data: { client } }) ? undefined : new Response("Expected WebSocket", { status: 400 });
+        return srv.upgrade(req, { data: { client } })
+          ? undefined
+          : new Response("Expected WebSocket", { status: 400 });
       }
       return app.handle(req, ip);
     },
@@ -142,7 +146,11 @@ function listen(waiterPhones: boolean) {
   });
   console.log(
     waiterPhones
-      ? `Kasuri server on port ${port} — waiter phones can connect at ${networkAddresses().map((a) => `http://${a}:${port}`).join(", ") || "(no network found)"}`
+      ? `Kasuri server on port ${port} — waiter phones can connect at ${
+          networkAddresses()
+            .map((a) => `http://${a}:${port}`)
+            .join(", ") || "(no network found)"
+        }`
       : `Kasuri server at http://127.0.0.1:${port} (this computer only)`,
   );
 }

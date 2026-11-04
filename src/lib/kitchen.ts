@@ -58,10 +58,7 @@ export function ticketAgeLevel(sentAt: string, now = Date.now()): TicketAgeLevel
   return "fresh";
 }
 
-const TICKET_AGE_STYLES: Record<
-  TicketAgeLevel,
-  { card: string; badge: string; label: string }
-> = {
+const TICKET_AGE_STYLES: Record<TicketAgeLevel, { card: string; badge: string; label: string }> = {
   fresh: {
     card: "border-available/50 bg-card",
     badge: "bg-available/15 text-available",

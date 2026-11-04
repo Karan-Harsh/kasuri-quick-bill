@@ -16,14 +16,8 @@ import {
   type KitchenTicketSummary,
 } from "@/lib/kitchen";
 
-export const Route = createFileRoute("/_authenticated/kitchen")({
-  head: () => ({
-    meta: [
-      { title: "Kitchen — Kasuri" },
-      { name: "description", content: "Live kitchen order queue for Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/kitchen")({
+  head: () => ({ meta: [{ title: "Kitchen — Kasuri" }] }),
   component: KitchenScreen,
 });
 
@@ -98,9 +92,7 @@ function KitchenScreen() {
           </p>
         </div>
 
-        {ticketsQuery.isLoading && (
-          <p className="text-muted-foreground">Loading kitchen queue…</p>
-        )}
+        {ticketsQuery.isLoading && <p className="text-muted-foreground">Loading kitchen queue…</p>}
 
         {!ticketsQuery.isLoading && tickets.length === 0 && (
           <Card className="flex flex-col items-center justify-center gap-3 p-12 text-center">
@@ -143,7 +135,9 @@ function KitchenScreen() {
                       key={line.id}
                       className="flex items-center justify-between border-b border-dashed border-border pb-2 last:border-0"
                     >
-                      <span className="text-lg font-semibold text-foreground">{line.item_name}</span>
+                      <span className="text-lg font-semibold text-foreground">
+                        {line.item_name}
+                      </span>
                       <span className="text-2xl font-extrabold tabular-nums text-foreground">
                         {line.quantity}
                       </span>

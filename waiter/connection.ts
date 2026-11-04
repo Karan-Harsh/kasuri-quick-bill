@@ -42,7 +42,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new OfflineError("Can't reach the counter. Check the Wi-Fi.");
   }
   const data = await res.json().catch(() => null);
-  if (res.status === 401 && token) throw new NotPairedError(data?.error ?? "This phone is not paired");
+  if (res.status === 401 && token)
+    throw new NotPairedError(data?.error ?? "This phone is not paired");
   if (!res.ok) throw new Error(data?.error ?? `Request failed (${res.status})`);
   return data as T;
 }
@@ -83,7 +84,8 @@ export function useCounterConnection(onUnpaired: () => void) {
           const msg = JSON.parse(event.data) as { type: string; topics?: string[] };
           if (msg.type !== "changed") return;
           for (const topic of msg.topics ?? []) {
-            for (const key of TOPIC_QUERIES[topic] ?? []) queryClient.invalidateQueries({ queryKey: [key] });
+            for (const key of TOPIC_QUERIES[topic] ?? [])
+              queryClient.invalidateQueries({ queryKey: [key] });
           }
         } catch {
           // ignore

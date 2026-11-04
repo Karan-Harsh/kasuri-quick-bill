@@ -25,18 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { inr } from "@/lib/kasuri";
-import { useStaff } from "@/hooks/useStaff";
 
-export const Route = createFileRoute("/_authenticated/menu")({
-  head: () => ({
-    meta: [
-      { title: "Menu — Kasuri" },
-      { name: "description", content: "Manage Kasuri menu items, prices and GST rates." },
-      { property: "og:title", content: "Menu — Kasuri" },
-      { property: "og:description", content: "Manage Kasuri menu items, prices and GST rates." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/menu")({
+  head: () => ({ meta: [{ title: "Menu — Kasuri" }] }),
   component: MenuPage,
 });
 
@@ -59,8 +50,6 @@ const emptyForm = (categoryId: string): ItemForm => ({
 
 function MenuPage() {
   const queryClient = useQueryClient();
-  const { data: staff } = useStaff();
-  const isAdmin = staff?.role === "admin";
   const [form, setForm] = useState<ItemForm | null>(null);
   const [newCategory, setNewCategory] = useState("");
 
@@ -95,9 +84,7 @@ function MenuPage() {
       api.post<{ tables: number; menuItems: number; tablesSkipped: boolean }>("/seed-starter"),
     onSuccess: (result) => {
       invalidate();
-      toast.success(
-        `Starter data loaded — ${result.tables} tables, ${result.menuItems} dishes`,
-      );
+      toast.success(`Starter data loaded — ${result.tables} tables, ${result.menuItems} dishes`);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not load starter data"),
@@ -166,7 +153,7 @@ function MenuPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-3xl font-bold">Menu</h1>
           <div className="flex flex-wrap gap-2">
-            {isAdmin && (categories.length === 0 || items.length === 0) && (
+            {(categories.length === 0 || items.length === 0) && (
               <Button
                 variant="outline"
                 className="h-12 text-base"
@@ -176,45 +163,34 @@ function MenuPage() {
                 Load starter menu
               </Button>
             )}
-            {isAdmin && (
-              <Button
-                className="h-12 text-base"
-                onClick={() => setForm(emptyForm(categories[0]?.id ?? ""))}
-              >
-                <Plus className="mr-2 size-5" /> Add item
-              </Button>
-            )}
+            <Button
+              className="h-12 text-base"
+              onClick={() => setForm(emptyForm(categories[0]?.id ?? ""))}
+            >
+              <Plus className="mr-2 size-5" /> Add item
+            </Button>
           </div>
         </div>
 
-        {!isAdmin && (
-          <p className="rounded-lg border border-border bg-card p-4 text-muted-foreground">
-            You are signed in as a cashier, so the menu is read-only. Ask the owner/admin
-            account to make changes.
-          </p>
-        )}
-
-        {isAdmin && (
-          <Card className="flex flex-wrap items-end gap-3 p-4">
-            <div className="space-y-2">
-              <Label htmlFor="newCategory">New category</Label>
-              <Input
-                id="newCategory"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                placeholder="e.g. Chinese"
-                className="h-11 w-56"
-              />
-            </div>
-            <Button
-              variant="outline"
-              className="h-11"
-              onClick={() => addCategory.mutate(newCategory)}
-            >
-              Add category
-            </Button>
-          </Card>
-        )}
+        <Card className="flex flex-wrap items-end gap-3 p-4">
+          <div className="space-y-2">
+            <Label htmlFor="newCategory">New category</Label>
+            <Input
+              id="newCategory"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="e.g. Chinese"
+              className="h-11 w-56"
+            />
+          </div>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => addCategory.mutate(newCategory)}
+          >
+            Add category
+          </Button>
+        </Card>
 
         {categories.map((category) => {
           const catItems = items.filter((item) => item.category_id === category.id);
@@ -234,40 +210,37 @@ function MenuPage() {
                           {inr(Number(item.price))} · GST {Number(item.tax_rate)}%
                         </p>
                       </div>
-                      {isAdmin && (
-                        <div className="flex gap-1">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            className="size-9"
-                            onClick={() =>
-                              setForm({
-                                id: item.id,
-                                name: item.name,
-                                category_id: item.category_id,
-                                price: String(Number(item.price)),
-                                tax_rate: String(Number(item.tax_rate)),
-                                is_active: item.is_active,
-                              })
-                            }
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-9 text-destructive"
-                            onClick={() => deleteItem.mutate(item.id)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="size-9"
+                          onClick={() =>
+                            setForm({
+                              id: item.id,
+                              name: item.name,
+                              category_id: item.category_id,
+                              price: String(Number(item.price)),
+                              tax_rate: String(Number(item.tax_rate)),
+                              is_active: item.is_active,
+                            })
+                          }
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-9 text-destructive"
+                          onClick={() => deleteItem.mutate(item.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={item.is_active}
-                        disabled={!isAdmin}
                         onCheckedChange={(checked) =>
                           toggleActive.mutate({ id: item.id, is_active: checked })
                         }
@@ -360,10 +333,7 @@ function MenuPage() {
             <Button variant="outline" onClick={() => setForm(null)}>
               Cancel
             </Button>
-            <Button
-              disabled={saveItem.isPending}
-              onClick={() => form && saveItem.mutate(form)}
-            >
+            <Button disabled={saveItem.isPending} onClick={() => form && saveItem.mutate(form)}>
               Save
             </Button>
           </DialogFooter>

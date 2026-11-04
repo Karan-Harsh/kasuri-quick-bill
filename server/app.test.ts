@@ -31,7 +31,11 @@ beforeEach(() => {
 });
 
 /** Sends a request as the counter (default) or from a phone's IP, optionally with a phone key. */
-async function call(method: string, path: string, opts: { body?: unknown; ip?: string; token?: string; origin?: string; base?: string } = {}) {
+async function call(
+  method: string,
+  path: string,
+  opts: { body?: unknown; ip?: string; token?: string; origin?: string; base?: string } = {},
+) {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.token) headers["Authorization"] = `Bearer ${opts.token}`;
@@ -43,13 +47,18 @@ async function call(method: string, path: string, opts: { body?: unknown; ip?: s
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const res = await app.handle(req, opts.ip ?? "127.0.0.1");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test reads arbitrary JSON responses
   return { status: res.status, data: (await res.json().catch(() => null)) as any };
 }
 
 async function pairPhone(name = "Ramesh") {
   await call("PUT", "/api/app-settings", { body: { waiter_phones_enabled: true } });
   const { data } = await call("POST", "/api/devices/pairing");
-  const res = await call("POST", "/api/devices/pair", { ip: PHONE_IP, origin: PC, body: { code: data.code, name } });
+  const res = await call("POST", "/api/devices/pair", {
+    ip: PHONE_IP,
+    origin: PC,
+    body: { code: data.code, name },
+  });
   expect(res.status).toBe(200);
   return res.data.token as string;
 }
@@ -85,12 +94,18 @@ describe("strangers", () => {
   });
 
   test("requests addressed to a domain name are refused (DNS rebinding)", async () => {
-    const res = await call("GET", "/api/tables", { base: "http://evil.example:8787", origin: "http://evil.example:8787" });
+    const res = await call("GET", "/api/tables", {
+      base: "http://evil.example:8787",
+      origin: "http://evil.example:8787",
+    });
     expect(res.status).toBe(403);
   });
 
   test("pairing is refused while waiter phones are off", async () => {
-    const res = await call("POST", "/api/devices/pair", { ip: PHONE_IP, body: { code: "123456", name: "X" } });
+    const res = await call("POST", "/api/devices/pair", {
+      ip: PHONE_IP,
+      body: { code: "123456", name: "X" },
+    });
     expect(res.status).toBe(403);
   });
 
@@ -99,9 +114,19 @@ describe("strangers", () => {
     const { data } = await call("POST", "/api/devices/pairing");
     const wrong = data.code === "000000" ? "111111" : "000000";
     for (let i = 0; i < 5; i++) {
-      expect((await call("POST", "/api/devices/pair", { ip: PHONE_IP, body: { code: wrong, name: "X" } })).status).toBe(401);
+      expect(
+        (
+          await call("POST", "/api/devices/pair", {
+            ip: PHONE_IP,
+            body: { code: wrong, name: "X" },
+          })
+        ).status,
+      ).toBe(401);
     }
-    const res = await call("POST", "/api/devices/pair", { ip: PHONE_IP, body: { code: data.code, name: "X" } });
+    const res = await call("POST", "/api/devices/pair", {
+      ip: PHONE_IP,
+      body: { code: data.code, name: "X" },
+    });
     expect(res.status).toBe(401);
     expect(res.data.error).toContain("expired");
   });
@@ -112,40 +137,60 @@ describe("waiter phones", () => {
     const token = await pairPhone("Ramesh");
     const opts = { ip: PHONE_IP, token, origin: PC };
     const tables = (await call("GET", "/api/tables", opts)).data;
-    const order = (await call("POST", "/api/orders", { ...opts, body: { table_id: tables[2].id } })).data;
+    const order = (await call("POST", "/api/orders", { ...opts, body: { table_id: tables[2].id } }))
+      .data;
     const menu = (await call("GET", "/api/menu-items", opts)).data;
-    expect((await call("POST", `/api/orders/${order.id}/items`, { ...opts, body: { menu_item_id: menu[0].id } })).status).toBe(200);
+    expect(
+      (
+        await call("POST", `/api/orders/${order.id}/items`, {
+          ...opts,
+          body: { menu_item_id: menu[0].id },
+        })
+      ).status,
+    ).toBe(200);
 
     const kot = await call("POST", `/api/orders/${order.id}/send-to-kitchen`, opts);
     expect(kot.status).toBe(200);
     expect(store.order(order.id).created_by).toBe("Ramesh");
     expect(store.ticket(kot.data.id).sent_by).toBe("Ramesh");
     const notice = events.find((e) => e.event.type === "waiter-kot");
-    expect(notice).toMatchObject({ to: "counter", event: { table_label: "T3", waiter: "Ramesh", kot_number: 1 } });
+    expect(notice).toMatchObject({
+      to: "counter",
+      event: { table_label: "T3", waiter: "Ramesh", kot_number: 1 },
+    });
   });
 
   test("cannot settle, discount, see reports or change settings", async () => {
     const token = await pairPhone();
     const opts = { ip: PHONE_IP, token, origin: PC };
     const order = store.createOrder(null);
-    expect((await call("POST", `/api/orders/${order.id}/settle`, { ...opts, body: {} })).status).toBe(403);
+    expect(
+      (await call("POST", `/api/orders/${order.id}/settle`, { ...opts, body: {} })).status,
+    ).toBe(403);
     expect((await call("DELETE", `/api/orders/${order.id}`, opts)).status).toBe(403);
     expect((await call("GET", "/api/reports", opts)).status).toBe(403);
-    expect((await call("PUT", "/api/settings", { ...opts, body: { gst_enabled: true } })).status).toBe(403);
+    expect(
+      (await call("PUT", "/api/settings", { ...opts, body: { gst_enabled: true } })).status,
+    ).toBe(403);
     expect((await call("GET", "/api/devices", opts)).status).toBe(403);
   });
 
   test("cannot start a parcel bill or change items already sent to the kitchen", async () => {
     const token = await pairPhone();
     const opts = { ip: PHONE_IP, token, origin: PC };
-    expect((await call("POST", "/api/orders", { ...opts, body: { table_id: null } })).status).toBe(400);
+    expect((await call("POST", "/api/orders", { ...opts, body: { table_id: null } })).status).toBe(
+      400,
+    );
 
     const t1 = (store.tables() as { id: string }[])[0]!.id;
     const order = store.createOrder(t1);
     store.addItem(order.id, (store.menuItems(true)[0] as { id: string }).id);
     store.sendToKitchen(order.id);
     const [line] = store.orderItems(order.id) as { id: string }[];
-    const res = await call("PATCH", `/api/order-items/${line!.id}`, { ...opts, body: { quantity: 0 } });
+    const res = await call("PATCH", `/api/order-items/${line!.id}`, {
+      ...opts,
+      body: { quantity: 0 },
+    });
     expect(res.status).toBe(403);
     expect(res.data.error).toContain("Ask the counter");
   });

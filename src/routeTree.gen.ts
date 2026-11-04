@@ -10,127 +10,108 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
-import { Route as AuthenticatedKitchenRouteImport } from './routes/_authenticated/kitchen'
-import { Route as AuthenticatedMenuRouteImport } from './routes/_authenticated/menu'
-import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedKotTicketIdRouteImport } from './routes/_authenticated/kot.$ticketId'
-import { Route as AuthenticatedOrderOrderIdRouteImport } from './routes/_authenticated/order.$orderId'
-import { Route as AuthenticatedReceiptOrderIdRouteImport } from './routes/_authenticated/receipt.$orderId'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as KitchenRouteImport } from './routes/kitchen'
+import { Route as MenuRouteImport } from './routes/menu'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as KotTicketIdRouteImport } from './routes/kot.$ticketId'
+import { Route as OrderOrderIdRouteImport } from './routes/order.$orderId'
+import { Route as ReceiptOrderIdRouteImport } from './routes/receipt.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
+const InventoryRoute = InventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedKitchenRoute = AuthenticatedKitchenRouteImport.update({
+const KitchenRoute = KitchenRouteImport.update({
   id: '/kitchen',
   path: '/kitchen',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedMenuRoute = AuthenticatedMenuRouteImport.update({
+const MenuRoute = MenuRouteImport.update({
   id: '/menu',
   path: '/menu',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
+const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AuthenticatedRouteRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedKotTicketIdRoute =
-  AuthenticatedKotTicketIdRouteImport.update({
-    id: '/kot/$ticketId',
-    path: '/kot/$ticketId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedOrderOrderIdRoute =
-  AuthenticatedOrderOrderIdRouteImport.update({
-    id: '/order/$orderId',
-    path: '/order/$orderId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedReceiptOrderIdRoute =
-  AuthenticatedReceiptOrderIdRouteImport.update({
-    id: '/receipt/$orderId',
-    path: '/receipt/$orderId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
+const KotTicketIdRoute = KotTicketIdRouteImport.update({
+  id: '/kot/$ticketId',
+  path: '/kot/$ticketId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrderOrderIdRoute = OrderOrderIdRouteImport.update({
+  id: '/order/$orderId',
+  path: '/order/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptOrderIdRoute = ReceiptOrderIdRouteImport.update({
+  id: '/receipt/$orderId',
+  path: '/receipt/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/inventory': typeof AuthenticatedInventoryRoute
-  '/kitchen': typeof AuthenticatedKitchenRoute
-  '/menu': typeof AuthenticatedMenuRoute
-  '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/kot/$ticketId': typeof AuthenticatedKotTicketIdRoute
-  '/order/$orderId': typeof AuthenticatedOrderOrderIdRoute
-  '/receipt/$orderId': typeof AuthenticatedReceiptOrderIdRoute
+  '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
+  '/menu': typeof MenuRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/kot/$ticketId': typeof KotTicketIdRoute
+  '/order/$orderId': typeof OrderOrderIdRoute
+  '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/inventory': typeof AuthenticatedInventoryRoute
-  '/kitchen': typeof AuthenticatedKitchenRoute
-  '/menu': typeof AuthenticatedMenuRoute
-  '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/kot/$ticketId': typeof AuthenticatedKotTicketIdRoute
-  '/order/$orderId': typeof AuthenticatedOrderOrderIdRoute
-  '/receipt/$orderId': typeof AuthenticatedReceiptOrderIdRoute
+  '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
+  '/menu': typeof MenuRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/kot/$ticketId': typeof KotTicketIdRoute
+  '/order/$orderId': typeof OrderOrderIdRoute
+  '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
-  '/_authenticated/kitchen': typeof AuthenticatedKitchenRoute
-  '/_authenticated/menu': typeof AuthenticatedMenuRoute
-  '/_authenticated/reports': typeof AuthenticatedReportsRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/kot/$ticketId': typeof AuthenticatedKotTicketIdRoute
-  '/_authenticated/order/$orderId': typeof AuthenticatedOrderOrderIdRoute
-  '/_authenticated/receipt/$orderId': typeof AuthenticatedReceiptOrderIdRoute
+  '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
+  '/kitchen': typeof KitchenRoute
+  '/menu': typeof MenuRoute
+  '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/kot/$ticketId': typeof KotTicketIdRoute
+  '/order/$orderId': typeof OrderOrderIdRoute
+  '/receipt/$orderId': typeof ReceiptOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/auth'
     | '/dashboard'
     | '/inventory'
     | '/kitchen'
@@ -143,7 +124,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/auth'
     | '/dashboard'
     | '/inventory'
     | '/kitchen'
@@ -156,23 +136,28 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
-    | '/auth'
-    | '/_authenticated/dashboard'
-    | '/_authenticated/inventory'
-    | '/_authenticated/kitchen'
-    | '/_authenticated/menu'
-    | '/_authenticated/reports'
-    | '/_authenticated/settings'
-    | '/_authenticated/kot/$ticketId'
-    | '/_authenticated/order/$orderId'
-    | '/_authenticated/receipt/$orderId'
+    | '/dashboard'
+    | '/inventory'
+    | '/kitchen'
+    | '/menu'
+    | '/reports'
+    | '/settings'
+    | '/kot/$ticketId'
+    | '/order/$orderId'
+    | '/receipt/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
+  DashboardRoute: typeof DashboardRoute
+  InventoryRoute: typeof InventoryRoute
+  KitchenRoute: typeof KitchenRoute
+  MenuRoute: typeof MenuRoute
+  ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
+  KotTicketIdRoute: typeof KotTicketIdRoute
+  OrderOrderIdRoute: typeof OrderOrderIdRoute
+  ReceiptOrderIdRoute: typeof ReceiptOrderIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,117 +169,83 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
+    '/dashboard': {
+      id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/inventory': {
-      id: '/_authenticated/inventory'
+    '/inventory': {
+      id: '/inventory'
       path: '/inventory'
       fullPath: '/inventory'
-      preLoaderRoute: typeof AuthenticatedInventoryRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/kitchen': {
-      id: '/_authenticated/kitchen'
+    '/kitchen': {
+      id: '/kitchen'
       path: '/kitchen'
       fullPath: '/kitchen'
-      preLoaderRoute: typeof AuthenticatedKitchenRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof KitchenRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/menu': {
-      id: '/_authenticated/menu'
+    '/menu': {
+      id: '/menu'
       path: '/menu'
       fullPath: '/menu'
-      preLoaderRoute: typeof AuthenticatedMenuRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof MenuRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/reports': {
-      id: '/_authenticated/reports'
+    '/reports': {
+      id: '/reports'
       path: '/reports'
       fullPath: '/reports'
-      preLoaderRoute: typeof AuthenticatedReportsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
+    '/settings': {
+      id: '/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/kot/$ticketId': {
-      id: '/_authenticated/kot/$ticketId'
+    '/kot/$ticketId': {
+      id: '/kot/$ticketId'
       path: '/kot/$ticketId'
       fullPath: '/kot/$ticketId'
-      preLoaderRoute: typeof AuthenticatedKotTicketIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof KotTicketIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/order/$orderId': {
-      id: '/_authenticated/order/$orderId'
+    '/order/$orderId': {
+      id: '/order/$orderId'
       path: '/order/$orderId'
       fullPath: '/order/$orderId'
-      preLoaderRoute: typeof AuthenticatedOrderOrderIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof OrderOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/receipt/$orderId': {
-      id: '/_authenticated/receipt/$orderId'
+    '/receipt/$orderId': {
+      id: '/receipt/$orderId'
       path: '/receipt/$orderId'
       fullPath: '/receipt/$orderId'
-      preLoaderRoute: typeof AuthenticatedReceiptOrderIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof ReceiptOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface AuthenticatedRouteRouteChildren {
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
-  AuthenticatedKitchenRoute: typeof AuthenticatedKitchenRoute
-  AuthenticatedMenuRoute: typeof AuthenticatedMenuRoute
-  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedKotTicketIdRoute: typeof AuthenticatedKotTicketIdRoute
-  AuthenticatedOrderOrderIdRoute: typeof AuthenticatedOrderOrderIdRoute
-  AuthenticatedReceiptOrderIdRoute: typeof AuthenticatedReceiptOrderIdRoute
-}
-
-const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
-  AuthenticatedKitchenRoute: AuthenticatedKitchenRoute,
-  AuthenticatedMenuRoute: AuthenticatedMenuRoute,
-  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedKotTicketIdRoute: AuthenticatedKotTicketIdRoute,
-  AuthenticatedOrderOrderIdRoute: AuthenticatedOrderOrderIdRoute,
-  AuthenticatedReceiptOrderIdRoute: AuthenticatedReceiptOrderIdRoute,
-}
-
-const AuthenticatedRouteRouteWithChildren =
-  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
+  DashboardRoute: DashboardRoute,
+  InventoryRoute: InventoryRoute,
+  KitchenRoute: KitchenRoute,
+  MenuRoute: MenuRoute,
+  ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
+  KotTicketIdRoute: KotTicketIdRoute,
+  OrderOrderIdRoute: OrderOrderIdRoute,
+  ReceiptOrderIdRoute: ReceiptOrderIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

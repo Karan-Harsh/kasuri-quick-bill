@@ -9,22 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { inr, paymentLabel, PAYMENT_METHODS } from "@/lib/kasuri";
 
-export const Route = createFileRoute("/_authenticated/reports")({
-  head: () => ({
-    meta: [
-      { title: "Sales reports — Kasuri" },
-      {
-        name: "description",
-        content: "Daily, weekly and monthly sales, item-wise and payment-wise, for Kasuri.",
-      },
-      { property: "og:title", content: "Sales reports — Kasuri" },
-      {
-        property: "og:description",
-        content: "Daily, weekly and monthly sales, item-wise and payment-wise, for Kasuri.",
-      },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/reports")({
+  head: () => ({ meta: [{ title: "Sales reports — Kasuri" }] }),
   component: Reports,
 });
 

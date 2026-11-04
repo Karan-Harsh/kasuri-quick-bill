@@ -82,25 +82,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Kasuri — Restaurant Billing" },
-      {
-        name: "description",
-        content: "Billing, table management and sales reports for Kasuri restaurant.",
-      },
-      { property: "og:title", content: "Kasuri — Restaurant Billing" },
-      {
-        property: "og:description",
-        content: "Billing, table management and sales reports for Kasuri restaurant.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-    links: [{ rel: "icon", href: "/favicon.ico", type: "image/x-icon" }],
-  }),
+  head: () => ({ meta: [{ title: "Kasuri — Restaurant Billing" }] }),
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,

@@ -64,7 +64,7 @@ const PAYMENT_METHODS = ["CASH", "UPI", "CARD"];
 const MOVEMENT_TYPES = ["used", "received", "count"];
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
-// SQLite stores booleans as 0/1; the screens expect true/false like Postgres returned.
+// SQLite stores booleans as 0/1; the screens expect true/false.
 const bool = <T extends Row>(row: T, ...keys: string[]): T => {
   for (const k of keys) if (k in row) (row as Row)[k] = Boolean(row[k]);
   return row;
@@ -95,18 +95,25 @@ export class Store {
   // ---------- settings ----------
 
   settings() {
-    return bool(this.get<Row>("SELECT id, name, gst_enabled FROM organization_settings WHERE id = 1")!, "gst_enabled");
+    return bool(
+      this.get<Row>("SELECT id, name, gst_enabled FROM organization_settings WHERE id = 1")!,
+      "gst_enabled",
+    );
   }
 
   updateSettings(input: { name?: string; gst_enabled?: boolean }) {
     const current = this.settings();
-    const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : current.name;
+    const name =
+      typeof input.name === "string" && input.name.trim() ? input.name.trim() : current.name;
     const gst = typeof input.gst_enabled === "boolean" ? input.gst_enabled : current.gst_enabled;
-    this.run("UPDATE organization_settings SET name = $name, gst_enabled = $gst, updated_at = $at WHERE id = 1", {
-      name,
-      gst: gst ? 1 : 0,
-      at: now(),
-    });
+    this.run(
+      "UPDATE organization_settings SET name = $name, gst_enabled = $gst, updated_at = $at WHERE id = 1",
+      {
+        name,
+        gst: gst ? 1 : 0,
+        at: now(),
+      },
+    );
     return this.settings();
   }
 
@@ -120,10 +127,13 @@ export class Store {
   updateAppSettings(patch: Partial<AppSettings>) {
     for (const [key, value] of Object.entries(patch ?? {})) {
       if (!(key in DEFAULT_APP_SETTINGS) || typeof value !== "boolean") continue;
-      this.run("INSERT INTO app_settings (key, value) VALUES ($k, $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value", {
-        k: key,
-        v: JSON.stringify(value),
-      });
+      this.run(
+        "INSERT INTO app_settings (key, value) VALUES ($k, $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        {
+          k: key,
+          v: JSON.stringify(value),
+        },
+      );
     }
     return this.appSettings();
   }
@@ -141,7 +151,8 @@ export class Store {
   pairDevice(code: string, name: string) {
     const p = this.pairing;
     const deviceName = (name ?? "").trim().slice(0, 40);
-    if (!p || Date.now() > p.expires) throw new AppError("This code has expired. Ask the counter for a new one.", 401);
+    if (!p || Date.now() > p.expires)
+      throw new AppError("This code has expired. Ask the counter for a new one.", 401);
     if (String(code ?? "").trim() !== p.code) {
       p.attempts++;
       // Stop guessing: after a few wrong tries the counter must show a new code.
@@ -152,25 +163,34 @@ export class Store {
     this.pairing = null;
     const token = randomBytes(32).toString("hex");
     const device: Device = { id: uuid(), name: deviceName, created_at: now(), last_seen_at: now() };
-    this.run("INSERT INTO devices (id, name, token_hash, created_at, last_seen_at) VALUES ($id, $name, $hash, $at, $at)", {
-      id: device.id,
-      name: device.name,
-      hash: sha256(token),
-      at: device.created_at,
-    });
+    this.run(
+      "INSERT INTO devices (id, name, token_hash, created_at, last_seen_at) VALUES ($id, $name, $hash, $at, $at)",
+      {
+        id: device.id,
+        name: device.name,
+        hash: sha256(token),
+        at: device.created_at,
+      },
+    );
     return { token, device };
   }
 
   /** Finds the phone that owns this key (and notes it was just seen), or null. */
   deviceForToken(token: string | null | undefined): Device | null {
     if (!token) return null;
-    const d = this.get<Device>("SELECT id, name, created_at, last_seen_at FROM devices WHERE token_hash = $h", { h: sha256(token) });
-    if (d) this.run("UPDATE devices SET last_seen_at = $at WHERE id = $id", { at: now(), id: d.id });
+    const d = this.get<Device>(
+      "SELECT id, name, created_at, last_seen_at FROM devices WHERE token_hash = $h",
+      { h: sha256(token) },
+    );
+    if (d)
+      this.run("UPDATE devices SET last_seen_at = $at WHERE id = $id", { at: now(), id: d.id });
     return d;
   }
 
   devices() {
-    return this.all<Device>("SELECT id, name, created_at, last_seen_at FROM devices ORDER BY created_at");
+    return this.all<Device>(
+      "SELECT id, name, created_at, last_seen_at FROM devices ORDER BY created_at",
+    );
   }
 
   removeDevice(id: string) {
@@ -220,9 +240,12 @@ export class Store {
         if (!this.get("SELECT 1 FROM restaurant_tables WHERE id = $id", { id: tableId })) {
           throw new AppError("Table not found", 404);
         }
-        const existing = this.get<{ id: string }>("SELECT id FROM orders WHERE table_id = $t AND status = 'OPEN'", {
-          t: tableId,
-        });
+        const existing = this.get<{ id: string }>(
+          "SELECT id FROM orders WHERE table_id = $t AND status = 'OPEN'",
+          {
+            t: tableId,
+          },
+        );
         if (existing) return { id: existing.id, existing: true };
       }
       const id = uuid();
@@ -246,13 +269,17 @@ export class Store {
     const o = this.get<OrderRow>("SELECT * FROM orders WHERE id = $id", { id });
     if (!o) throw new AppError("Order not found", 404);
     const table = o.table_id
-      ? this.get<{ label: string }>("SELECT label FROM restaurant_tables WHERE id = $id", { id: o.table_id })
+      ? this.get<{ label: string }>("SELECT label FROM restaurant_tables WHERE id = $id", {
+          id: o.table_id,
+        })
       : null;
     return { ...o, gst_applied: Boolean(o.gst_applied), restaurant_tables: table };
   }
 
   orderItems(orderId: string) {
-    return this.all("SELECT * FROM order_items WHERE order_id = $id ORDER BY created_at, rowid", { id: orderId });
+    return this.all("SELECT * FROM order_items WHERE order_id = $id ORDER BY created_at, rowid", {
+      id: orderId,
+    });
   }
 
   /** Order with table and lines, for the printed bill. */
@@ -261,14 +288,20 @@ export class Store {
   }
 
   private openOrderOrThrow(orderId: string) {
-    const o = this.get<{ status: string }>("SELECT status FROM orders WHERE id = $id", { id: orderId });
+    const o = this.get<{ status: string }>("SELECT status FROM orders WHERE id = $id", {
+      id: orderId,
+    });
     if (!o) throw new AppError("Order not found", 404);
     if (o.status !== "OPEN") throw new AppError("Order is not open");
   }
 
   /** Adds `quantity` of a menu item. New quantity always goes on a line that hasn't been sent to the
    *  kitchen yet, so the next KOT only lists what is new. */
-  private addToUnsentLine(orderId: string, item: { id: string | null; name: string; price: number; tax_rate: number }, quantity: number) {
+  private addToUnsentLine(
+    orderId: string,
+    item: { id: string | null; name: string; price: number; tax_rate: number },
+    quantity: number,
+  ) {
     const line = this.get<{ id: string }>(
       `SELECT id FROM order_items
        WHERE order_id = $o AND menu_item_id IS $m AND item_name = $name AND unit_price = $p AND tax_rate = $t
@@ -277,23 +310,40 @@ export class Store {
       { o: orderId, m: item.id, name: item.name, p: item.price, t: item.tax_rate },
     );
     if (line) {
-      this.run("UPDATE order_items SET quantity = quantity + $q WHERE id = $id", { q: quantity, id: line.id });
+      this.run("UPDATE order_items SET quantity = quantity + $q WHERE id = $id", {
+        q: quantity,
+        id: line.id,
+      });
       return;
     }
     this.run(
       `INSERT INTO order_items (id, order_id, menu_item_id, item_name, unit_price, tax_rate, quantity, created_at)
        VALUES ($id, $o, $m, $name, $p, $t, $q, $at)`,
-      { id: uuid(), o: orderId, m: item.id, name: item.name, p: item.price, t: item.tax_rate, q: quantity, at: now() },
+      {
+        id: uuid(),
+        o: orderId,
+        m: item.id,
+        name: item.name,
+        p: item.price,
+        t: item.tax_rate,
+        q: quantity,
+        at: now(),
+      },
     );
   }
 
   addItem(orderId: string, menuItemId: string) {
     this.tx(() => {
       this.openOrderOrThrow(orderId);
-      const item = this.get<{ id: string; name: string; price: number; tax_rate: number; is_active: number }>(
-        "SELECT id, name, price, tax_rate, is_active FROM menu_items WHERE id = $id",
-        { id: menuItemId },
-      );
+      const item = this.get<{
+        id: string;
+        name: string;
+        price: number;
+        tax_rate: number;
+        is_active: number;
+      }>("SELECT id, name, price, tax_rate, is_active FROM menu_items WHERE id = $id", {
+        id: menuItemId,
+      });
       if (!item) throw new AppError("Menu item not found", 404);
       if (!item.is_active) throw new AppError(`${item.name} is not available right now`);
       this.addToUnsentLine(orderId, item, 1);
@@ -303,12 +353,12 @@ export class Store {
   /** Changes a line's quantity. 0 removes it. Raising an item already sent to the kitchen puts the
    *  extra on a new unsent line (so only the extra is printed on the next KOT); lowering it just reduces it. */
   setItemQuantity(lineId: string, quantity: number, opts: { waiter?: boolean } = {}) {
-    if (!Number.isInteger(quantity) || quantity < 0) throw new AppError("Quantity must be a whole number");
+    if (!Number.isInteger(quantity) || quantity < 0)
+      throw new AppError("Quantity must be a whole number");
     this.tx(() => {
-      const line = this.get<Row & { order_id: string; quantity: number; kitchen_sent_at: string | null }>(
-        "SELECT * FROM order_items WHERE id = $id",
-        { id: lineId },
-      );
+      const line = this.get<
+        Row & { order_id: string; quantity: number; kitchen_sent_at: string | null }
+      >("SELECT * FROM order_items WHERE id = $id", { id: lineId });
       if (!line) throw new AppError("Item not found", 404);
       this.openOrderOrThrow(line.order_id);
       if (opts.waiter && line.kitchen_sent_at) {
@@ -328,7 +378,10 @@ export class Store {
           quantity - line.quantity,
         );
       } else {
-        this.run("UPDATE order_items SET quantity = $q WHERE id = $id", { q: quantity, id: lineId });
+        this.run("UPDATE order_items SET quantity = $q WHERE id = $id", {
+          q: quantity,
+          id: lineId,
+        });
       }
       this.refreshKitchenReady(line.order_id);
     });
@@ -361,8 +414,14 @@ export class Store {
 
   /** An order is "ready" when nothing is cooking and nothing is waiting to be sent. */
   private refreshKitchenReady(orderId: string) {
-    const cooking = this.get("SELECT 1 FROM kitchen_tickets WHERE order_id = $id AND status = 'OPEN'", { id: orderId });
-    const unsent = this.get("SELECT 1 FROM order_items WHERE order_id = $id AND kitchen_sent_at IS NULL", { id: orderId });
+    const cooking = this.get(
+      "SELECT 1 FROM kitchen_tickets WHERE order_id = $id AND status = 'OPEN'",
+      { id: orderId },
+    );
+    const unsent = this.get(
+      "SELECT 1 FROM order_items WHERE order_id = $id AND kitchen_sent_at IS NULL",
+      { id: orderId },
+    );
     if (cooking || unsent) {
       this.run("UPDATE orders SET kitchen_ready_at = NULL WHERE id = $id", { id: orderId });
     }
@@ -370,15 +429,30 @@ export class Store {
 
   completeTicket(ticketId: string) {
     this.tx(() => {
-      const t = this.get<{ order_id: string; status: string }>("SELECT order_id, status FROM kitchen_tickets WHERE id = $id", {
+      const t = this.get<{ order_id: string; status: string }>(
+        "SELECT order_id, status FROM kitchen_tickets WHERE id = $id",
+        {
+          id: ticketId,
+        },
+      );
+      if (!t || t.status !== "OPEN") throw new AppError("Ticket not found or already done");
+      this.run("UPDATE kitchen_tickets SET status = 'DONE', completed_at = $at WHERE id = $id", {
+        at: now(),
         id: ticketId,
       });
-      if (!t || t.status !== "OPEN") throw new AppError("Ticket not found or already done");
-      this.run("UPDATE kitchen_tickets SET status = 'DONE', completed_at = $at WHERE id = $id", { at: now(), id: ticketId });
-      const cooking = this.get("SELECT 1 FROM kitchen_tickets WHERE order_id = $id AND status = 'OPEN'", { id: t.order_id });
-      const unsent = this.get("SELECT 1 FROM order_items WHERE order_id = $id AND kitchen_sent_at IS NULL", { id: t.order_id });
+      const cooking = this.get(
+        "SELECT 1 FROM kitchen_tickets WHERE order_id = $id AND status = 'OPEN'",
+        { id: t.order_id },
+      );
+      const unsent = this.get(
+        "SELECT 1 FROM order_items WHERE order_id = $id AND kitchen_sent_at IS NULL",
+        { id: t.order_id },
+      );
       if (!cooking && !unsent) {
-        this.run("UPDATE orders SET kitchen_ready_at = $at WHERE id = $id AND status = 'OPEN'", { at: now(), id: t.order_id });
+        this.run("UPDATE orders SET kitchen_ready_at = $at WHERE id = $id AND status = 'OPEN'", {
+          at: now(),
+          id: t.order_id,
+        });
       }
     });
   }
@@ -409,15 +483,27 @@ export class Store {
         `UPDATE orders SET status = 'COMPLETED', discount = $d, subtotal = $s, tax_amount = $tax, total = $total,
            payment_method = $m, gst_applied = $gst, completed_at = $at, kitchen_ready_at = NULL
          WHERE id = $id`,
-        { d: t.discount, s: t.subtotal, tax: t.taxAmount, total: t.total, m: method, gst: gstEnabled ? 1 : 0, at, id: orderId },
+        {
+          d: t.discount,
+          s: t.subtotal,
+          tax: t.taxAmount,
+          total: t.total,
+          m: method,
+          gst: gstEnabled ? 1 : 0,
+          at,
+          id: orderId,
+        },
       );
-      this.run("INSERT INTO payments (id, order_id, method, amount, paid_at) VALUES ($id, $o, $m, $a, $at)", {
-        id: uuid(),
-        o: orderId,
-        m: method,
-        a: t.total,
-        at,
-      });
+      this.run(
+        "INSERT INTO payments (id, order_id, method, amount, paid_at) VALUES ($id, $o, $m, $a, $at)",
+        {
+          id: uuid(),
+          o: orderId,
+          m: method,
+          a: t.total,
+          at,
+        },
+      );
       return { ...t, bill_number: this.order(orderId).bill_number };
     });
   }
@@ -452,13 +538,18 @@ export class Store {
     const lines = this.ticketLines(tickets.map((t) => t.id));
     return tickets.map((t) => ({
       ...t,
-      lines: lines.filter((l) => l.kitchen_ticket_id === t.id).map(({ kitchen_ticket_id: _, ...l }) => l),
+      lines: lines
+        .filter((l) => l.kitchen_ticket_id === t.id)
+        .map(({ kitchen_ticket_id: _, ...l }) => l),
     }));
   }
 
-  /** One ticket in the same nested shape the KOT print page used with Supabase. */
+  /** One ticket with its order (bill, table) and lines, for the KOT print page. */
   ticket(id: string) {
-    const t = this.get<Row & { order_id: string; sent_by: string | null }>("SELECT * FROM kitchen_tickets WHERE id = $id", { id });
+    const t = this.get<Row & { order_id: string; sent_by: string | null }>(
+      "SELECT * FROM kitchen_tickets WHERE id = $id",
+      { id },
+    );
     if (!t) throw new AppError("Ticket not found", 404);
     const o = this.get<Row>(
       `SELECT o.bill_number, o.order_type, t.label FROM orders o
@@ -468,7 +559,11 @@ export class Store {
     return {
       ...t,
       orders: o
-        ? { bill_number: o.bill_number, order_type: o.order_type, restaurant_tables: o.label ? { label: o.label } : null }
+        ? {
+            bill_number: o.bill_number,
+            order_type: o.order_type,
+            restaurant_tables: o.label ? { label: o.label } : null,
+          }
         : null,
       order_items: this.ticketLines([id]).map(({ kitchen_ticket_id: _, ...l }) => l),
     };
@@ -486,13 +581,18 @@ export class Store {
     if (this.get("SELECT 1 FROM categories WHERE lower(name) = lower($n)", { n: trimmed })) {
       throw new AppError(`Category "${trimmed}" already exists`);
     }
-    const next = this.get<{ n: number }>("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM categories")!.n;
-    this.run("INSERT INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $s, $at)", {
-      id: uuid(),
-      name: trimmed,
-      s: next,
-      at: now(),
-    });
+    const next = this.get<{ n: number }>(
+      "SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM categories",
+    )!.n;
+    this.run(
+      "INSERT INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $s, $at)",
+      {
+        id: uuid(),
+        name: trimmed,
+        s: next,
+        at: now(),
+      },
+    );
   }
 
   menuItems(activeOnly: boolean) {
@@ -503,7 +603,16 @@ export class Store {
     return rows.map((r) => bool(r, "is_active"));
   }
 
-  saveMenuItem(id: string | null, input: Partial<{ name: string; category_id: string; price: number; tax_rate: number; is_active: boolean }>) {
+  saveMenuItem(
+    id: string | null,
+    input: Partial<{
+      name: string;
+      category_id: string;
+      price: number;
+      tax_rate: number;
+      is_active: boolean;
+    }>,
+  ) {
     const existing = id ? this.get<Row>("SELECT * FROM menu_items WHERE id = $id", { id }) : null;
     if (id && !existing) throw new AppError("Menu item not found", 404);
     const name = (input.name ?? (existing?.name as string) ?? "").trim();
@@ -512,10 +621,19 @@ export class Store {
     const tax = Number(input.tax_rate ?? existing?.tax_rate ?? 0);
     const active = input.is_active ?? (existing ? Boolean(existing.is_active) : true);
     if (!name) throw new AppError("Item name is required");
-    if (!categoryId || !this.get("SELECT 1 FROM categories WHERE id = $id", { id: categoryId })) throw new AppError("Pick a category");
+    if (!categoryId || !this.get("SELECT 1 FROM categories WHERE id = $id", { id: categoryId }))
+      throw new AppError("Pick a category");
     if (!(price >= 0)) throw new AppError("Price must be zero or more");
     if (!(tax >= 0)) throw new AppError("GST rate must be zero or more");
-    const params = { id: id ?? uuid(), cat: categoryId, name, price, tax, active: active ? 1 : 0, at: now() };
+    const params = {
+      id: id ?? uuid(),
+      cat: categoryId,
+      name,
+      price,
+      tax,
+      active: active ? 1 : 0,
+      at: now(),
+    };
     if (existing) {
       this.run(
         "UPDATE menu_items SET category_id = $cat, name = $name, price = $price, tax_rate = $tax, is_active = $active, updated_at = $at WHERE id = $id",
@@ -559,9 +677,9 @@ export class Store {
   // ---------- inventory ----------
 
   inventoryItems() {
-    return this.all<Row>("SELECT id, name, unit, current_quantity, is_active, updated_at FROM inventory_items ORDER BY name").map((r) =>
-      bool(r, "is_active"),
-    );
+    return this.all<Row>(
+      "SELECT id, name, unit, current_quantity, is_active, updated_at FROM inventory_items ORDER BY name",
+    ).map((r) => bool(r, "is_active"));
   }
 
   inventoryMovements(limit = 30) {
@@ -572,26 +690,38 @@ export class Store {
        ORDER BY m.created_at DESC, m.rowid DESC LIMIT $limit`,
       { limit: Math.min(Math.max(Number(limit) || 30, 1), 500) },
     );
-    return rows.map(({ item_name, item_unit, ...m }) => ({ ...m, inventory_items: { name: item_name, unit: item_unit } }));
+    return rows.map(({ item_name, item_unit, ...m }) => ({
+      ...m,
+      inventory_items: { name: item_name, unit: item_unit },
+    }));
   }
 
-  saveInventoryItem(id: string | null, input: { name?: string; unit?: string; is_active?: boolean; opening_quantity?: number }) {
+  saveInventoryItem(
+    id: string | null,
+    input: { name?: string; unit?: string; is_active?: boolean; opening_quantity?: number },
+  ) {
     const name = (input.name ?? "").trim();
     if (!name) throw new AppError("Item name is required");
     const unit = (input.unit ?? "kg").trim() || "kg";
     const active = input.is_active ?? true;
-    const clash = this.get<{ id: string }>("SELECT id FROM inventory_items WHERE lower(name) = lower($n)", { n: name });
+    const clash = this.get<{ id: string }>(
+      "SELECT id FROM inventory_items WHERE lower(name) = lower($n)",
+      { n: name },
+    );
     if (clash && clash.id !== id) throw new AppError(`"${name}" is already in the inventory`);
 
     return this.tx(() => {
       if (id) {
-        const r = this.run("UPDATE inventory_items SET name = $name, unit = $unit, is_active = $a, updated_at = $at WHERE id = $id", {
-          name,
-          unit,
-          a: active ? 1 : 0,
-          at: now(),
-          id,
-        });
+        const r = this.run(
+          "UPDATE inventory_items SET name = $name, unit = $unit, is_active = $a, updated_at = $at WHERE id = $id",
+          {
+            name,
+            unit,
+            a: active ? 1 : 0,
+            at: now(),
+            id,
+          },
+        );
         if (r.changes === 0) throw new AppError("Inventory item not found", 404);
         return { id };
       }
@@ -609,15 +739,28 @@ export class Store {
   }
 
   setInventoryActive(id: string, active: boolean) {
-    this.run("UPDATE inventory_items SET is_active = $a, updated_at = $at WHERE id = $id", { a: active ? 1 : 0, at: now(), id });
+    this.run("UPDATE inventory_items SET is_active = $a, updated_at = $at WHERE id = $id", {
+      a: active ? 1 : 0,
+      at: now(),
+      id,
+    });
   }
 
   /** used = subtract, received = add, count = set to the counted amount. Stock can never go below zero. */
-  recordMovement(itemId: string, type: string, quantity: number, note?: string | null, createdBy: string | null = null) {
+  recordMovement(
+    itemId: string,
+    type: string,
+    quantity: number,
+    note?: string | null,
+    createdBy: string | null = null,
+  ) {
     if (!MOVEMENT_TYPES.includes(type)) throw new AppError("Invalid stock update type");
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty < 0) throw new AppError("Quantity must be zero or positive");
-    if (type !== "count" && qty === 0) throw new AppError(`${type === "used" ? "Used" : "Received"} quantity must be greater than zero`);
+    if (type !== "count" && qty === 0)
+      throw new AppError(
+        `${type === "used" ? "Used" : "Received"} quantity must be greater than zero`,
+      );
 
     return this.tx(() => {
       const item = this.get<{ current_quantity: number; unit: string }>(
@@ -634,13 +777,26 @@ export class Store {
         delta = type === "used" ? -round3(qty) : round3(qty);
         next = round3(item.current_quantity + delta);
       }
-      if (next < 0) throw new AppError(`Not enough stock (have ${item.current_quantity} ${item.unit})`);
+      if (next < 0)
+        throw new AppError(`Not enough stock (have ${item.current_quantity} ${item.unit})`);
       const at = now();
-      this.run("UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id", { q: next, at, id: itemId });
+      this.run(
+        "UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id",
+        { q: next, at, id: itemId },
+      );
       this.run(
         `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at)
          VALUES ($id, $item, $type, $delta, $after, $note, $by, $at)`,
-        { id: uuid(), item: itemId, type, delta, after: next, note: note?.trim() || null, by: createdBy, at },
+        {
+          id: uuid(),
+          item: itemId,
+          type,
+          delta,
+          after: next,
+          note: note?.trim() || null,
+          by: createdBy,
+          at,
+        },
       );
       return { current_quantity: next };
     });

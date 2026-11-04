@@ -8,23 +8,11 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { computeTotals, inr } from "@/lib/kasuri";
-import {
-  orderKitchenStatus,
-  orderKitchenStatusLabel,
-  playKitchenAlert,
-} from "@/lib/kitchen";
+import { orderKitchenStatus, orderKitchenStatusLabel, playKitchenAlert } from "@/lib/kitchen";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({
-    meta: [
-      { title: "Table board — Kasuri" },
-      { name: "description", content: "Live table status and today's sales at Kasuri." },
-      { property: "og:title", content: "Table board — Kasuri" },
-      { property: "og:description", content: "Live table status and today's sales at Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/dashboard")({
+  head: () => ({ meta: [{ title: "Table board — Kasuri" }] }),
   component: Dashboard,
 });
 
@@ -230,7 +218,9 @@ function Dashboard() {
                   <button
                     key={order.id}
                     type="button"
-                    onClick={() => navigate({ to: "/order/$orderId", params: { orderId: order.id } })}
+                    onClick={() =>
+                      navigate({ to: "/order/$orderId", params: { orderId: order.id } })
+                    }
                     className={`rounded-xl border-2 p-4 text-left transition ${
                       isReady
                         ? "border-emerald-500 bg-emerald-500/10 animate-pulse"

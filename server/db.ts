@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 
-// Local replacement for the old Supabase/Postgres schema. Ids stay text UUIDs so
-// existing screens and URLs (/order/$orderId) keep working unchanged.
+// Database schema. Ids are text UUIDs (used in screen URLs such as /order/$orderId).
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS counters (
     name  TEXT PRIMARY KEY,
@@ -183,11 +182,15 @@ export function openDatabase(path: string): Database {
   const isNew = !db.query("SELECT 1 FROM organization_settings WHERE id = 1").get();
   if (isNew) {
     db.transaction(() => {
-      db.query("INSERT INTO organization_settings (id, name, gst_enabled, updated_at) VALUES (1, 'Kasuri', 0, $at)").run({
+      db.query(
+        "INSERT INTO organization_settings (id, name, gst_enabled, updated_at) VALUES (1, 'Kasuri', 0, $at)",
+      ).run({
         at: now(),
       });
-      // Same starting points as the old Postgres sequences.
-      db.query("INSERT OR IGNORE INTO counters (name, value) VALUES ('bill_number', 1000), ('kot_number', 0)").run();
+      // Bills start at #1001, kitchen tickets at #1.
+      db.query(
+        "INSERT OR IGNORE INTO counters (name, value) VALUES ('bill_number', 1000), ('kot_number', 0)",
+      ).run();
       seedStarterData(db);
     })();
   }
@@ -202,40 +205,57 @@ export function seedStarterData(db: Database) {
 
   for (const t of STARTER_TABLES) {
     const r = db
-      .query("INSERT OR IGNORE INTO restaurant_tables (id, table_number, label, created_at) VALUES ($id, $n, $label, $at)")
+      .query(
+        "INSERT OR IGNORE INTO restaurant_tables (id, table_number, label, created_at) VALUES ($id, $n, $label, $at)",
+      )
       .run({ id: uuid(), n: t.table_number, label: t.label, at });
     tables += r.changes;
   }
 
   const categoryId = new Map<string, string>();
   for (const c of STARTER_CATEGORIES) {
-    db.query("INSERT OR IGNORE INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $sort, $at)").run({
+    db.query(
+      "INSERT OR IGNORE INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $sort, $at)",
+    ).run({
       id: uuid(),
       name: c.name,
       sort: c.sort_order,
       at,
     });
-    const row = db.query<{ id: string }, { name: string }>("SELECT id FROM categories WHERE name = $name").get({ name: c.name });
+    const row = db
+      .query<{ id: string }, { name: string }>("SELECT id FROM categories WHERE name = $name")
+      .get({ name: c.name });
     if (row) categoryId.set(c.name, row.id);
   }
 
   for (const m of STARTER_MENU) {
-    const exists = db.query("SELECT 1 FROM menu_items WHERE lower(name) = lower($name)").get({ name: m.name });
+    const exists = db
+      .query("SELECT 1 FROM menu_items WHERE lower(name) = lower($name)")
+      .get({ name: m.name });
     if (exists) continue;
     db.query(
       `INSERT INTO menu_items (id, category_id, name, price, tax_rate, is_active, created_at, updated_at)
        VALUES ($id, $cat, $name, $price, $tax, 1, $at, $at)`,
-    ).run({ id: uuid(), cat: categoryId.get(m.category)!, name: m.name, price: m.price, tax: m.tax_rate, at });
+    ).run({
+      id: uuid(),
+      cat: categoryId.get(m.category)!,
+      name: m.name,
+      price: m.price,
+      tax: m.tax_rate,
+      at,
+    });
     menuItems++;
   }
 
   return { tables, menuItems };
 }
 
-/** Next value of a counter (bill and KOT numbers). Numbers are never reused, like a Postgres sequence. */
+/** Next value of a counter (bill and KOT numbers). Numbers are never reused, even if a bill is discarded. */
 export function nextCounter(db: Database, name: "bill_number" | "kot_number"): number {
   const row = db
-    .query<{ value: number }, { name: string }>("UPDATE counters SET value = value + 1 WHERE name = $name RETURNING value")
+    .query<{ value: number }, { name: string }>(
+      "UPDATE counters SET value = value + 1 WHERE name = $name RETURNING value",
+    )
     .get({ name });
   if (!row) throw new Error(`Missing counter ${name}`);
   return row.value;

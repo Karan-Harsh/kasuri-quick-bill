@@ -10,14 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WaiterPhonesCard } from "@/components/WaiterPhonesCard";
 
-export const Route = createFileRoute("/_authenticated/settings")({
-  head: () => ({
-    meta: [
-      { title: "Settings — Kasuri" },
-      { name: "description", content: "Billing, waiter phones and backups for Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/settings")({
+  head: () => ({ meta: [{ title: "Settings — Kasuri" }] }),
   component: SettingsPage,
 });
 
@@ -68,8 +62,8 @@ function SettingsPage() {
           <div>
             <h2 className="text-xl font-bold">GST on bills</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Turn off while the restaurant is below the GST registration threshold. New bills
-              will exclude GST; past settled bills keep what was charged at the time.
+              Turn off while the restaurant is below the GST registration threshold. New bills will
+              exclude GST; past settled bills keep what was charged at the time.
             </p>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">

@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { History, Pencil, Plus } from "lucide-react";
@@ -32,16 +32,9 @@ import {
   type InventoryMovementType,
   type InventoryUnit,
 } from "@/lib/inventory";
-import { useStaff } from "@/hooks/useStaff";
 
-export const Route = createFileRoute("/_authenticated/inventory")({
-  head: () => ({
-    meta: [
-      { title: "Inventory — Kasuri" },
-      { name: "description", content: "Track kitchen stock levels and nightly usage at Kasuri." },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
+export const Route = createFileRoute("/inventory")({
+  head: () => ({ meta: [{ title: "Inventory — Kasuri" }] }),
   component: InventoryPage,
 });
 
@@ -70,7 +63,6 @@ const emptyForm = (): ItemForm => ({
 
 function InventoryPage() {
   const queryClient = useQueryClient();
-  const { data: staff, isLoading: staffLoading } = useStaff();
   const [form, setForm] = useState<ItemForm | null>(null);
   const [movement, setMovement] = useState<MovementDialog | null>(null);
   const [movementQty, setMovementQty] = useState("");
@@ -152,21 +144,9 @@ function InventoryPage() {
       setMovementNote("");
       toast.success("Stock updated");
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update stock"),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Could not update stock"),
   });
-
-  if (staffLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <AppHeader />
-        <p className="p-8 text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  if (staff?.role !== "admin") {
-    return <Navigate to="/dashboard" />;
-  }
 
   const items = itemsQuery.data ?? [];
   const movements = movementsQuery.data ?? [];
@@ -242,9 +222,7 @@ function InventoryPage() {
               </div>
             </Card>
           ))}
-          {itemsQuery.isLoading && (
-            <p className="text-muted-foreground">Loading inventory…</p>
-          )}
+          {itemsQuery.isLoading && <p className="text-muted-foreground">Loading inventory…</p>}
           {!itemsQuery.isLoading && activeItems.length === 0 && (
             <Card className="p-6 text-muted-foreground sm:col-span-2 lg:col-span-3">
               No inventory items yet. Add onions, milk, paneer, and other staples you track daily.

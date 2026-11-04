@@ -1,8 +1,7 @@
 node_modules
 dist
-.output
-.vinxi
-pnpm-lock.yaml
-package-lock.json
+dist-waiter
+src-tauri/target
+src-tauri/gen
 bun.lock
 routeTree.gen.ts
