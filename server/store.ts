@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { compatibleUnits, convertQuantity } from "../src/lib/inventory";
 import { computeTotals } from "../src/lib/kasuri";
 import { nextCounter, now, seedStarterData, uuid } from "./db";
 
@@ -60,6 +61,12 @@ export interface OrderRow {
   kitchen_ready_at: string | null;
 }
 
+export interface IngredientInput {
+  inventory_item_id: string;
+  quantity: number;
+  unit: string;
+}
+
 const PAYMENT_METHODS = ["CASH", "UPI", "CARD"];
 const MOVEMENT_TYPES = ["used", "received", "count"];
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -90,6 +97,27 @@ export class Store {
 
   private tx<T>(fn: () => T): T {
     return this.db.transaction(fn)();
+  }
+
+  /** Runs `fn` in a transaction (a savepoint when already inside one): all of it is saved, or none. */
+  transaction<T>(fn: () => T): T {
+    return this.tx(fn);
+  }
+
+  /** Runs `fn` for real, then keeps its changes only if `keep(result)` says so (used to check an
+   *  upload without saving it). `finish` adjusts the result once the outcome is known. */
+  trial<T>(fn: () => T, keep: (result: T) => boolean, finish: (result: T) => T): T {
+    const undo = Symbol("undo");
+    let result!: T;
+    try {
+      this.tx(() => {
+        result = fn();
+        if (!keep(result)) throw undo;
+      });
+    } catch (err) {
+      if (err !== undo) throw err;
+    }
+    return finish(result);
   }
 
   // ---------- settings ----------
@@ -504,8 +532,55 @@ export class Store {
           at,
         },
       );
-      return { ...t, bill_number: this.order(orderId).bill_number };
+      const billNumber = this.order(orderId).bill_number;
+      this.useStockForOrder(orderId, billNumber);
+      return { ...t, bill_number: billNumber };
     });
+  }
+
+  /** Takes the ingredients of every dish on a settled bill out of stock, one update per stock item.
+   *  Billing never fails because of stock: if the books say there is less than the recipe needs,
+   *  stock just goes to zero (a stock count will correct it). */
+  private useStockForOrder(orderId: string, billNumber: number) {
+    const rows = this.all<{
+      inventory_item_id: string;
+      recipe_qty: number;
+      recipe_unit: string;
+      stock_unit: string;
+      portions: number;
+    }>(
+      `SELECT r.inventory_item_id, r.quantity AS recipe_qty, r.unit AS recipe_unit,
+              inv.unit AS stock_unit, SUM(i.quantity) AS portions
+       FROM order_items i
+       JOIN menu_item_ingredients r ON r.menu_item_id = i.menu_item_id
+       JOIN inventory_items inv ON inv.id = r.inventory_item_id AND inv.is_active = 1
+       WHERE i.order_id = $o
+       GROUP BY r.id`,
+      { o: orderId },
+    );
+    const needed = new Map<string, number>();
+    for (const r of rows) {
+      const perPortion = convertQuantity(r.recipe_qty, r.recipe_unit, r.stock_unit);
+      if (perPortion == null) continue; // unit no longer matches; skipped rather than guessed
+      needed.set(
+        r.inventory_item_id,
+        (needed.get(r.inventory_item_id) ?? 0) + perPortion * r.portions,
+      );
+    }
+    for (const [itemId, amount] of needed) {
+      const item = this.get<{ current_quantity: number }>(
+        "SELECT current_quantity FROM inventory_items WHERE id = $id",
+        { id: itemId },
+      )!;
+      this.writeStock(
+        itemId,
+        "used",
+        Math.max(0, round3(item.current_quantity - amount)),
+        item.current_quantity,
+        `Bill #${billNumber}`,
+        null,
+      );
+    }
   }
 
   discardOrder(orderId: string) {
@@ -603,6 +678,49 @@ export class Store {
     return rows.map((r) => bool(r, "is_active"));
   }
 
+  /** Every dish's recipe lines, for the menu screen. */
+  menuIngredients() {
+    return this.all(
+      `SELECT r.id, r.menu_item_id, r.inventory_item_id, r.quantity, r.unit, inv.name AS inventory_name
+       FROM menu_item_ingredients r JOIN inventory_items inv ON inv.id = r.inventory_item_id
+       ORDER BY inv.name`,
+    );
+  }
+
+  /** Replaces a dish's recipe with `lines`. */
+  private saveIngredients(menuItemId: string, lines: unknown) {
+    if (!Array.isArray(lines)) throw new AppError("Ingredients must be a list");
+    const seen = new Set<string>();
+    const clean: IngredientInput[] = [];
+    for (const raw of lines as Partial<IngredientInput>[]) {
+      const inv = this.get<{ name: string; unit: string }>(
+        "SELECT name, unit FROM inventory_items WHERE id = $id",
+        { id: raw?.inventory_item_id ?? "" },
+      );
+      if (!inv) throw new AppError("Pick a stock item for each ingredient");
+      if (seen.has(raw!.inventory_item_id!))
+        throw new AppError(`${inv.name} is listed twice. Put the total amount on one line.`);
+      seen.add(raw!.inventory_item_id!);
+      const qty = Number(raw?.quantity);
+      if (!Number.isFinite(qty) || qty <= 0)
+        throw new AppError(`Enter how much ${inv.name} one portion uses`);
+      const unit = String(raw?.unit ?? inv.unit);
+      if (!compatibleUnits(inv.unit).includes(unit))
+        throw new AppError(
+          `${inv.name} is kept in ${inv.unit}, so it can't be measured in ${unit}`,
+        );
+      clean.push({ inventory_item_id: raw!.inventory_item_id!, quantity: round3(qty), unit });
+    }
+    this.run("DELETE FROM menu_item_ingredients WHERE menu_item_id = $id", { id: menuItemId });
+    for (const l of clean) {
+      this.run(
+        `INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity, unit)
+         VALUES ($id, $m, $inv, $q, $u)`,
+        { id: uuid(), m: menuItemId, inv: l.inventory_item_id, q: l.quantity, u: l.unit },
+      );
+    }
+  }
+
   saveMenuItem(
     id: string | null,
     input: Partial<{
@@ -611,6 +729,8 @@ export class Store {
       price: number;
       tax_rate: number;
       is_active: boolean;
+      /** When given, replaces the dish's recipe. */
+      ingredients: IngredientInput[];
     }>,
   ) {
     const existing = id ? this.get<Row>("SELECT * FROM menu_items WHERE id = $id", { id }) : null;
@@ -634,18 +754,22 @@ export class Store {
       active: active ? 1 : 0,
       at: now(),
     };
-    if (existing) {
-      this.run(
-        "UPDATE menu_items SET category_id = $cat, name = $name, price = $price, tax_rate = $tax, is_active = $active, updated_at = $at WHERE id = $id",
-        params,
-      );
-    } else {
-      this.run(
-        `INSERT INTO menu_items (id, category_id, name, price, tax_rate, is_active, created_at, updated_at)
-         VALUES ($id, $cat, $name, $price, $tax, $active, $at, $at)`,
-        params,
-      );
-    }
+    return this.tx(() => {
+      if (existing) {
+        this.run(
+          "UPDATE menu_items SET category_id = $cat, name = $name, price = $price, tax_rate = $tax, is_active = $active, updated_at = $at WHERE id = $id",
+          params,
+        );
+      } else {
+        this.run(
+          `INSERT INTO menu_items (id, category_id, name, price, tax_rate, is_active, created_at, updated_at)
+           VALUES ($id, $cat, $name, $price, $tax, $active, $at, $at)`,
+          params,
+        );
+      }
+      if (input.ingredients !== undefined) this.saveIngredients(params.id, input.ingredients);
+      return { id: params.id };
+    });
   }
 
   deleteMenuItem(id: string) {
@@ -661,9 +785,12 @@ export class Store {
 
   report(fromIso: string, toIso: string) {
     const orders = this.all<Row & { id: string }>(
-      `SELECT id, order_type, payment_method, subtotal, discount, tax_amount, total, completed_at
-       FROM orders WHERE status = 'COMPLETED' AND completed_at >= $from AND completed_at <= $to
-       ORDER BY completed_at DESC`,
+      `SELECT o.id, o.bill_number, o.order_type, o.payment_method, o.subtotal, o.discount, o.tax_amount,
+              o.total, o.created_at, o.completed_at, t.label AS table_label,
+              (SELECT COALESCE(SUM(i.quantity), 0) FROM order_items i WHERE i.order_id = o.id) AS item_count
+       FROM orders o LEFT JOIN restaurant_tables t ON t.id = o.table_id
+       WHERE o.status = 'COMPLETED' AND o.completed_at >= $from AND o.completed_at <= $to
+       ORDER BY o.completed_at DESC`,
       { from: fromIso, to: toIso },
     );
     const lines = this.all(
@@ -678,7 +805,9 @@ export class Store {
 
   inventoryItems() {
     return this.all<Row>(
-      "SELECT id, name, unit, current_quantity, is_active, updated_at FROM inventory_items ORDER BY name",
+      `SELECT i.id, i.name, i.unit, i.current_quantity, i.low_stock_level, i.is_active, i.updated_at,
+              (SELECT COUNT(*) FROM menu_item_ingredients r WHERE r.inventory_item_id = i.id) AS dish_count
+       FROM inventory_items i ORDER BY i.name`,
     ).map((r) => bool(r, "is_active"));
   }
 
@@ -698,12 +827,23 @@ export class Store {
 
   saveInventoryItem(
     id: string | null,
-    input: { name?: string; unit?: string; is_active?: boolean; opening_quantity?: number },
+    input: {
+      name?: string;
+      unit?: string;
+      is_active?: boolean;
+      opening_quantity?: number;
+      /** Warn when stock goes below this (in the item's unit). null or "" = no warning. */
+      low_stock_level?: number | string | null;
+    },
   ) {
     const name = (input.name ?? "").trim();
     if (!name) throw new AppError("Item name is required");
     const unit = (input.unit ?? "kg").trim() || "kg";
     const active = input.is_active ?? true;
+    const rawLevel = input.low_stock_level;
+    const lowLevel = rawLevel == null || rawLevel === "" ? null : Number(rawLevel);
+    if (lowLevel != null && !(Number.isFinite(lowLevel) && lowLevel >= 0))
+      throw new AppError("Minimum stock must be zero or more");
     const clash = this.get<{ id: string }>(
       "SELECT id FROM inventory_items WHERE lower(name) = lower($n)",
       { n: name },
@@ -712,12 +852,25 @@ export class Store {
 
     return this.tx(() => {
       if (id) {
+        // Recipes measure this item in its unit's family (g/kg, ml/L, pcs/dozen); don't break them.
+        const clashing = this.get<{ unit: string }>(
+          "SELECT unit FROM menu_item_ingredients WHERE inventory_item_id = $id",
+          { id },
+        );
+        if (clashing && !compatibleUnits(unit).includes(clashing.unit))
+          throw new AppError(
+            `Dishes use ${name} in ${clashing.unit}. Pick a unit like ${compatibleUnits(clashing.unit).join(" or ")}, or change those recipes first.`,
+          );
         const r = this.run(
-          "UPDATE inventory_items SET name = $name, unit = $unit, is_active = $a, updated_at = $at WHERE id = $id",
+          `UPDATE inventory_items SET name = $name, unit = $unit, is_active = $a, updated_at = $at,
+             low_stock_level = CASE WHEN $keep THEN low_stock_level ELSE $low END
+           WHERE id = $id`,
           {
             name,
             unit,
             a: active ? 1 : 0,
+            low: lowLevel,
+            keep: rawLevel === undefined ? 1 : 0,
             at: now(),
             id,
           },
@@ -728,8 +881,8 @@ export class Store {
       const newId = uuid();
       const at = now();
       this.run(
-        "INSERT INTO inventory_items (id, name, unit, current_quantity, is_active, created_at, updated_at) VALUES ($id, $name, $unit, 0, $a, $at, $at)",
-        { id: newId, name, unit, a: active ? 1 : 0, at },
+        "INSERT INTO inventory_items (id, name, unit, current_quantity, low_stock_level, is_active, created_at, updated_at) VALUES ($id, $name, $unit, 0, $low, $a, $at, $at)",
+        { id: newId, name, unit, low: lowLevel, a: active ? 1 : 0, at },
       );
       const opening = Number(input.opening_quantity) || 0;
       if (opening < 0) throw new AppError("Starting quantity must be zero or more");
@@ -779,26 +932,39 @@ export class Store {
       }
       if (next < 0)
         throw new AppError(`Not enough stock (have ${item.current_quantity} ${item.unit})`);
-      const at = now();
-      this.run(
-        "UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id",
-        { q: next, at, id: itemId },
-      );
-      this.run(
-        `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at)
-         VALUES ($id, $item, $type, $delta, $after, $note, $by, $at)`,
-        {
-          id: uuid(),
-          item: itemId,
-          type,
-          delta,
-          after: next,
-          note: note?.trim() || null,
-          by: createdBy,
-          at,
-        },
-      );
+      this.writeStock(itemId, type, next, item.current_quantity, note, createdBy);
       return { current_quantity: next };
     });
+  }
+
+  /** Sets an item's stock and logs the change in its history. */
+  private writeStock(
+    itemId: string,
+    type: string,
+    next: number,
+    before: number,
+    note: string | null | undefined,
+    createdBy: string | null,
+  ) {
+    const at = now();
+    this.run("UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id", {
+      q: next,
+      at,
+      id: itemId,
+    });
+    this.run(
+      `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at)
+       VALUES ($id, $item, $type, $delta, $after, $note, $by, $at)`,
+      {
+        id: uuid(),
+        item: itemId,
+        type,
+        delta: round3(next - before),
+        after: next,
+        note: note?.trim() || null,
+        by: createdBy,
+        at,
+      },
+    );
   }
 }

@@ -30,8 +30,10 @@ interface ReceiptOrder {
 }
 
 export const Route = createFileRoute("/receipt/$orderId")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { print: boolean; back?: "reports" } => ({
     print: search["print"] === "1" || search["print"] === true,
+    /** Where "back" goes: the Reports screen when the bill was opened from there. */
+    ...(search["back"] === "reports" ? { back: "reports" as const } : {}),
   }),
   head: () => ({ meta: [{ title: "Receipt — Kasuri" }] }),
   component: Receipt,
@@ -39,7 +41,7 @@ export const Route = createFileRoute("/receipt/$orderId")({
 
 function Receipt() {
   const { orderId } = Route.useParams();
-  const { print: autoPrint } = Route.useSearch();
+  const { print: autoPrint, back } = Route.useSearch();
   const printedRef = useRef(false);
 
   const orderQuery = useQuery({
@@ -74,9 +76,15 @@ function Receipt() {
     <div className="min-h-screen bg-muted/40 py-8">
       <div className="no-print mx-auto mb-4 flex max-w-2xl items-center justify-between px-4">
         <Button asChild variant="outline" className="h-11">
-          <Link to="/dashboard">
-            <ArrowLeft className="mr-2 size-4" /> Tables
-          </Link>
+          {back === "reports" ? (
+            <Link to="/reports">
+              <ArrowLeft className="mr-2 size-4" /> Reports
+            </Link>
+          ) : (
+            <Link to="/dashboard">
+              <ArrowLeft className="mr-2 size-4" /> Tables
+            </Link>
+          )}
         </Button>
         <Button className="h-11" onClick={() => window.print()}>
           <Printer className="mr-2 size-4" /> Print bill

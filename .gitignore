@@ -4,6 +4,7 @@ node_modules
 # Build output
 dist
 dist-waiter
+/installer/
 
 # Local data (development database and backups)
 /data/

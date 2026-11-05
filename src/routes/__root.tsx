@@ -8,11 +8,13 @@ import {
 } from "@tanstack/react-router";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { api, useLiveUpdates, type AppSettings } from "@/lib/api";
+import { formatQuantity, isLowStock } from "@/lib/inventory";
 import { playKitchenAlert } from "@/lib/kitchen";
+import { useInventoryItems } from "@/lib/low-stock";
 import { printKotInBackground } from "@/lib/print-kot";
 
 function NotFoundComponent() {
@@ -95,11 +97,37 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <HeadContent />
       <LiveUpdates />
+      <LowStockAlerts />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster richColors position="top-center" />
     </QueryClientProvider>
   );
+}
+
+/** Pops up a warning when a stock item drops below its minimum level (e.g. after a bill uses it up). */
+function LowStockAlerts() {
+  const router = useRouter();
+  const { data } = useInventoryItems();
+  const known = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const low = data.filter((item) => item.is_active && isLowStock(item));
+    const ids = new Set(low.map((item) => item.id));
+    // Items already low when the app opens are shown on the Inventory screen, not popped up.
+    if (known.current) {
+      for (const item of low) {
+        if (known.current.has(item.id)) continue;
+        toast.warning(`${item.name} is running low`, {
+          description: `${formatQuantity(Number(item.current_quantity), item.unit)} left · minimum ${formatQuantity(Number(item.low_stock_level), item.unit)}`,
+          duration: 10000,
+          action: { label: "Open inventory", onClick: () => router.navigate({ to: "/inventory" }) },
+        });
+      }
+    }
+    known.current = ids;
+  }, [data, router]);
+  return null;
 }
 
 /**

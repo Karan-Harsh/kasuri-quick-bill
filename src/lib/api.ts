@@ -34,7 +34,7 @@ export const api = {
 const TOPIC_QUERIES: Record<string, QueryKey[]> = {
   orders: [["open-orders"], ["order"], ["order-items"], ["today-stats"], ["receipt"], ["reports"]],
   kitchen: [["kitchen-tickets"], ["kot"], ["open-orders"]],
-  menu: [["categories"], ["menu-items"]],
+  menu: [["categories"], ["menu-items"], ["menu-ingredients"]],
   inventory: [["inventory-items"], ["inventory-movements"]],
   settings: [["organization-settings"], ["app-settings"]],
   tables: [["tables"]],

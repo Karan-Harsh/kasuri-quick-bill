@@ -120,6 +120,18 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS inventory_movements_item_idx ON inventory_movements (item_id, created_at);
 
+  -- Recipe: how much of each stock item one portion of a dish uses. The amount is in "unit", which must be
+  -- convertible to the stock item's own unit (e.g. 40 g of rice from a stock kept in kg).
+  CREATE TABLE IF NOT EXISTS menu_item_ingredients (
+    id                TEXT PRIMARY KEY,
+    menu_item_id      TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+    inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+    quantity          REAL NOT NULL CHECK (quantity > 0),
+    unit              TEXT NOT NULL,
+    UNIQUE (menu_item_id, inventory_item_id)
+  );
+  CREATE INDEX IF NOT EXISTS menu_item_ingredients_inventory_idx ON menu_item_ingredients (inventory_item_id);
+
   -- Simple on/off settings for the counter app (waiter phones, auto-print, ...). Values are JSON.
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
@@ -178,6 +190,7 @@ export function openDatabase(path: string): Database {
   db.exec("PRAGMA foreign_keys = ON;");
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA);
+  migrate(db);
 
   const isNew = !db.query("SELECT 1 FROM organization_settings WHERE id = 1").get();
   if (isNew) {
@@ -195,6 +208,20 @@ export function openDatabase(path: string): Database {
     })();
   }
   return db;
+}
+
+const hasColumn = (db: Database, table: string, column: string) =>
+  (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).some(
+    (c) => c.name === column,
+  );
+
+/** Brings databases created by older versions up to date. Each step must be safe to run again. */
+function migrate(db: Database) {
+  // Minimum stock before the app warns (in the item's own unit). NULL = no warning.
+  if (!hasColumn(db, "inventory_items", "low_stock_level"))
+    db.exec(
+      "ALTER TABLE inventory_items ADD COLUMN low_stock_level REAL CHECK (low_stock_level >= 0)",
+    );
 }
 
 /** Adds the 8 tables and the starter menu, skipping anything that already exists. */

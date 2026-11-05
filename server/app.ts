@@ -6,7 +6,12 @@
 // Anyone else only gets the waiter app's files and the pairing endpoint.
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
+import { buildSetupWorkbook, importSetupWorkbook } from "./setup-sheet";
 import { AppError, type AppSettings, type Device, type Store, type Topic } from "./store";
+import { writeXlsx } from "./xlsx";
+
+/** Largest setup sheet accepted for upload. */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 export type Client = { kind: "counter" } | { kind: "waiter"; device: Device };
 
@@ -37,6 +42,8 @@ export interface AppOptions {
   networkAddresses: () => string[];
   system: () => unknown;
   backupNow: () => string;
+  /** Saves a file for the user (the Downloads folder) and returns where it went. */
+  saveDownload?: (fileName: string, bytes: Uint8Array) => string;
 }
 
 // Request bodies are untrusted JSON; every handler checks the fields it reads.
@@ -210,7 +217,10 @@ export function createApp(opts: AppOptions) {
     "POST",
     "/api/orders/:id/settle",
     "counter",
-    change(["orders", "kitchen"], ({ params, body }) => store.settle(params.id!, body ?? {})),
+    // Settling uses up the dishes' ingredients, so stock changes too.
+    change(["orders", "kitchen", "inventory"], ({ params, body }) =>
+      store.settle(params.id!, body ?? {}),
+    ),
   );
   route(
     "DELETE",
@@ -241,20 +251,21 @@ export function createApp(opts: AppOptions) {
     "POST",
     "/api/menu-items",
     "counter",
-    change(["menu"], ({ body }) => store.saveMenuItem(null, body ?? {})),
+    change(["menu", "inventory"], ({ body }) => store.saveMenuItem(null, body ?? {})),
   );
   route(
     "PATCH",
     "/api/menu-items/:id",
     "counter",
-    change(["menu"], ({ params, body }) => store.saveMenuItem(params.id!, body ?? {})),
+    change(["menu", "inventory"], ({ params, body }) => store.saveMenuItem(params.id!, body ?? {})),
   );
   route(
     "DELETE",
     "/api/menu-items/:id",
     "counter",
-    change(["menu"], ({ params }) => store.deleteMenuItem(params.id!)),
+    change(["menu", "inventory"], ({ params }) => store.deleteMenuItem(params.id!)),
   );
+  route("GET", "/api/menu-ingredients", "counter", () => store.menuIngredients());
   route(
     "POST",
     "/api/seed-starter",
@@ -265,6 +276,24 @@ export function createApp(opts: AppOptions) {
   route("GET", "/api/reports", "counter", ({ query }) =>
     store.report(query.get("from") ?? "", query.get("to") ?? ""),
   );
+
+  // ----- Excel setup sheet -----
+  route("POST", "/api/setup-sheet/download", "counter", () => {
+    if (!opts.saveDownload) throw new AppError("Saving files isn't available here", 500);
+    const day = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local time
+    const bytes = writeXlsx(buildSetupWorkbook(store));
+    return { path: opts.saveDownload(`Kasuri setup ${day}.xlsx`, bytes) };
+  });
+  /** body: { file: base64 of the .xlsx, apply: false to only check it } */
+  route("POST", "/api/setup-sheet/import", "counter", ({ body }) => {
+    if (typeof body?.file !== "string" || body.file === "") throw new AppError("Choose a file");
+    const bytes = new Uint8Array(Buffer.from(body.file, "base64"));
+    if (bytes.byteLength > MAX_UPLOAD_BYTES)
+      throw new AppError("This file is too big. The setup sheet should be well under 5 MB.");
+    const result = importSetupWorkbook(store, bytes, body.apply === true);
+    if (result.applied) opts.broadcast({ type: "changed", topics: ["menu", "inventory"] });
+    return result;
+  });
 
   route("GET", "/api/inventory/items", "counter", () => store.inventoryItems());
   route(
@@ -277,7 +306,9 @@ export function createApp(opts: AppOptions) {
     "PUT",
     "/api/inventory/items/:id",
     "counter",
-    change(["inventory"], ({ params, body }) => store.saveInventoryItem(params.id!, body ?? {})),
+    change(["inventory", "menu"], ({ params, body }) =>
+      store.saveInventoryItem(params.id!, body ?? {}),
+    ),
   );
   route(
     "PATCH",

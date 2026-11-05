@@ -51,6 +51,18 @@ One-time setup on the Windows PC:
 1. Install [Bun](https://bun.sh) (`powershell -c "irm bun.sh/install.ps1 | iex"`).
 2. Install [Rust](https://rustup.rs) (accept the defaults).
 3. Install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with **Desktop development with C++**.
+4. Install [Node.js](https://nodejs.org) 22 or newer (the screens are built with Vite, which runs on Node).
+
+Or, in an Administrator PowerShell:
+
+```powershell
+winget install --id Oven-sh.Bun -e
+winget install --id OpenJS.NodeJS.LTS -e
+winget install --id Rustlang.Rustup -e
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Then open a new terminal so the new tools are on PATH.
 
 Then in the project folder:
 
@@ -64,7 +76,8 @@ Windows may warn that the installer isn't signed: **More info → Run anyway**.
 
 ## Development
 
-Works on macOS, Windows or Linux with [Bun](https://bun.sh):
+Works on macOS, Windows or Linux with [Bun](https://bun.sh) and [Node.js](https://nodejs.org) 20.19+ (22 recommended).
+Node must be on PATH: Vite runs on it, and crashes if Bun stands in for it (`bun run dev` checks this first).
 
 ```sh
 bun install

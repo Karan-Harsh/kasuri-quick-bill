@@ -4,8 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,web,waiter -c blue,green,magenta \"bun --watch server/main.ts --data-dir ./data --waiter-dir ./dist-waiter --dev\" \"vite dev\" \"vite build -c vite.waiter.config.ts --watch --mode development\"",
-    "dev:web": "vite dev",
+    "dev": "node scripts/require-node.mjs && concurrently -k -n server,web,waiter -c blue,green,magenta \"bun --watch server/main.ts --data-dir ./data --waiter-dir ./dist-waiter --dev\" \"vite dev\" \"vite build -c vite.waiter.config.ts --watch --mode development\"",
+    "dev:web": "node scripts/require-node.mjs && vite dev",
     "server": "bun server/main.ts --data-dir ./data --waiter-dir ./dist-waiter --dev",
     "build": "vite build && vite build -c vite.waiter.config.ts",
     "build:server": "bun scripts/build-server.ts",
@@ -61,6 +61,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "fflate": "0.8.2",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "qrcode": "^1.5.4",

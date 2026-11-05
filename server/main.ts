@@ -3,8 +3,8 @@
 // restaurant Wi-Fi so paired phones can take orders.
 //
 //   bun server/main.ts --data-dir ./data [--port 8787] [--waiter-dir ./dist-waiter] [--dev]
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, networkInterfaces } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import type { Server, ServerWebSocket } from "bun";
@@ -97,6 +97,20 @@ function networkAddresses(): string[] {
   return out.sort((a, b) => Number(b.startsWith("192.168.")) - Number(a.startsWith("192.168.")));
 }
 
+// ---------- files saved for the user ----------
+
+/** Saves into this computer's Downloads folder (the data folder if there is none), never overwriting. */
+function saveDownload(fileName: string, bytes: Uint8Array) {
+  const downloads = path.join(homedir(), "Downloads");
+  const dir = existsSync(downloads) ? downloads : dataDir;
+  const ext = path.extname(fileName);
+  const base = path.basename(fileName, ext);
+  let file = path.join(dir, fileName);
+  for (let n = 2; existsSync(file); n++) file = path.join(dir, `${base} (${n})${ext}`);
+  writeFileSync(file, bytes);
+  return file;
+}
+
 const app = createApp({
   store,
   port,
@@ -107,6 +121,7 @@ const app = createApp({
   networkAddresses,
   system: () => ({ dataDir, dbPath, backupDir, lastBackup }),
   backupNow,
+  saveDownload,
   setWaiterPhonesEnabled: (enabled) => {
     // Let the current response finish, then switch listening address.
     setTimeout(() => listen(enabled), 50);

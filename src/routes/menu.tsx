@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
@@ -25,11 +25,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { inr } from "@/lib/kasuri";
+import { compatibleUnits, formatQuantity } from "@/lib/inventory";
+import { useInventoryItems } from "@/lib/low-stock";
 
 export const Route = createFileRoute("/menu")({
   head: () => ({ meta: [{ title: "Menu — Kasuri" }] }),
   component: MenuPage,
 });
+
+interface IngredientLine {
+  inventory_item_id: string;
+  quantity: string;
+  unit: string;
+}
 
 interface ItemForm {
   id?: string;
@@ -38,6 +46,17 @@ interface ItemForm {
   price: string;
   tax_rate: string;
   is_active: boolean;
+  /** What one portion uses from stock. */
+  ingredients: IngredientLine[];
+}
+
+interface MenuIngredient {
+  id: string;
+  menu_item_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  unit: string;
+  inventory_name: string;
 }
 
 const emptyForm = (categoryId: string): ItemForm => ({
@@ -46,6 +65,7 @@ const emptyForm = (categoryId: string): ItemForm => ({
   price: "",
   tax_rate: "5",
   is_active: true,
+  ingredients: [],
 });
 
 function MenuPage() {
@@ -73,6 +93,12 @@ function MenuPage() {
       >("/menu-items"),
   });
 
+  const ingredientsQuery = useQuery({
+    queryKey: ["menu-ingredients"],
+    queryFn: () => api.get<MenuIngredient[]>("/menu-ingredients"),
+  });
+  const stockItems = useInventoryItems().data ?? [];
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["menu-items"] });
     queryClient.invalidateQueries({ queryKey: ["categories"] });
@@ -98,6 +124,13 @@ function MenuPage() {
         price: Number(input.price) || 0,
         tax_rate: Number(input.tax_rate) || 0,
         is_active: input.is_active,
+        ingredients: input.ingredients
+          .filter((line) => line.inventory_item_id)
+          .map((line) => ({
+            inventory_item_id: line.inventory_item_id,
+            quantity: Number(line.quantity),
+            unit: line.unit,
+          })),
       };
       if (!payload.name) throw new Error("Item name is required");
       if (!payload.category_id) throw new Error("Pick a category");
@@ -145,6 +178,16 @@ function MenuPage() {
 
   const categories = categoriesQuery.data ?? [];
   const items = itemsQuery.data ?? [];
+  const recipes = ingredientsQuery.data ?? [];
+  const recipeOf = (menuItemId: string) => recipes.filter((r) => r.menu_item_id === menuItemId);
+  const stockById = new Map(stockItems.map((item) => [item.id, item]));
+
+  const setLine = (index: number, patch: Partial<IngredientLine>) =>
+    form &&
+    setForm({
+      ...form,
+      ingredients: form.ingredients.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+    });
 
   return (
     <div className="min-h-screen bg-background">
@@ -163,6 +206,11 @@ function MenuPage() {
                 Load starter menu
               </Button>
             )}
+            <Button asChild variant="outline" className="h-12 text-base">
+              <Link to="/settings" hash="excel-setup">
+                <FileSpreadsheet className="mr-2 size-5" /> Add many from Excel
+              </Link>
+            </Button>
             <Button
               className="h-12 text-base"
               onClick={() => setForm(emptyForm(categories[0]?.id ?? ""))}
@@ -209,6 +257,16 @@ function MenuPage() {
                         <p className="text-sm text-muted-foreground">
                           {inr(Number(item.price))} · GST {Number(item.tax_rate)}%
                         </p>
+                        {recipeOf(item.id).length > 0 && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Uses{" "}
+                            {recipeOf(item.id)
+                              .map(
+                                (r) => `${formatQuantity(r.quantity, r.unit)} ${r.inventory_name}`,
+                              )
+                              .join(", ")}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-1">
                         <Button
@@ -223,6 +281,11 @@ function MenuPage() {
                               price: String(Number(item.price)),
                               tax_rate: String(Number(item.tax_rate)),
                               is_active: item.is_active,
+                              ingredients: recipeOf(item.id).map((r) => ({
+                                inventory_item_id: r.inventory_item_id,
+                                quantity: String(r.quantity),
+                                unit: r.unit,
+                              })),
                             })
                           }
                         >
@@ -326,6 +389,112 @@ function MenuPage() {
                   onCheckedChange={(checked) => setForm({ ...form, is_active: checked })}
                 />
                 <span className="text-sm text-muted-foreground">Active on the order screen</span>
+              </div>
+
+              <div className="space-y-2 border-t border-border pt-4">
+                <Label>Ingredients for one portion</Label>
+                <p className="text-sm text-muted-foreground">
+                  Taken out of inventory each time this dish is billed.
+                </p>
+                {form.ingredients.map((line, index) => {
+                  const stock = stockById.get(line.inventory_item_id);
+                  const usedElsewhere = new Set(
+                    form.ingredients.filter((_, i) => i !== index).map((l) => l.inventory_item_id),
+                  );
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <Select
+                        value={line.inventory_item_id}
+                        onValueChange={(value) => {
+                          const picked = stockById.get(value);
+                          setLine(index, {
+                            inventory_item_id: value,
+                            // Smallest unit first (g, ml, pcs): recipes are usually small amounts.
+                            unit: picked ? compatibleUnits(picked.unit)[0]! : line.unit,
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="h-11 flex-1">
+                          <SelectValue placeholder="Stock item" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stockItems
+                            .filter(
+                              (s) =>
+                                (s.is_active && !usedElsewhere.has(s.id)) ||
+                                s.id === line.inventory_item_id,
+                            )
+                            .map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={line.quantity}
+                        onChange={(e) => setLine(index, { quantity: e.target.value })}
+                        placeholder="Qty"
+                        className="h-11 w-24"
+                        aria-label="Quantity per portion"
+                      />
+                      <Select
+                        value={line.unit}
+                        onValueChange={(value) => setLine(index, { unit: value })}
+                        disabled={!stock}
+                      >
+                        <SelectTrigger className="h-11 w-24" aria-label="Unit">
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(stock ? compatibleUnits(stock.unit) : [line.unit]).map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {unit}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-11 shrink-0"
+                        aria-label="Remove ingredient"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            ingredients: form.ingredients.filter((_, i) => i !== index),
+                          })
+                        }
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+                {stockItems.some((s) => s.is_active) ? (
+                  <Button
+                    variant="outline"
+                    className="h-11"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        ingredients: [
+                          ...form.ingredients,
+                          { inventory_item_id: "", quantity: "", unit: "" },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus className="mr-2 size-4" /> Add ingredient
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Add stock items on the Inventory screen first.
+                  </p>
+                )}
               </div>
             </div>
           )}

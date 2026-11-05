@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { api } from "@/lib/api";
+import { BillDialog } from "@/components/BillDialog";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { inr, paymentLabel, PAYMENT_METHODS } from "@/lib/kasuri";
+import { inr, orderTypeLabel, paymentLabel, PAYMENT_METHODS } from "@/lib/kasuri";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({ meta: [{ title: "Sales reports — Kasuri" }] }),
@@ -39,6 +41,8 @@ function presetRange(preset: Preset): { from: string; to: string } {
 function Reports() {
   const [preset, setPreset] = useState<Preset>("today");
   const [range, setRange] = useState(presetRange("today"));
+  const [billSearch, setBillSearch] = useState("");
+  const [openBill, setOpenBill] = useState<string | null>(null);
 
   const applyPreset = (next: Preset) => {
     setPreset(next);
@@ -54,6 +58,10 @@ function Reports() {
       api.get<{
         orders: {
           id: string;
+          bill_number: number;
+          table_label: string | null;
+          item_count: number;
+          created_at: string;
           order_type: string;
           payment_method: string | null;
           subtotal: number;
@@ -74,6 +82,18 @@ function Reports() {
   const totalDiscount = orders.reduce((sum, order) => sum + Number(order.discount), 0);
   const dineIn = orders.filter((order) => order.order_type === "DINE_IN");
   const parcel = orders.filter((order) => order.order_type === "PARCEL");
+
+  const search = billSearch.trim().replace(/^#/, "");
+  const shownBills = search ? orders.filter((o) => String(o.bill_number).includes(search)) : orders;
+  const multiDay = range.from !== range.to;
+  const billTime = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("en-IN", {
+          ...(multiDay ? { day: "numeric", month: "short" } : {}),
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "—";
 
   const itemRows = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; amount: number }>();
@@ -177,6 +197,77 @@ function Reports() {
         </section>
 
         <Card className="p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">
+              Bills <span className="text-muted-foreground">({orders.length})</span>
+            </h2>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={billSearch}
+                onChange={(e) => setBillSearch(e.target.value)}
+                placeholder="Find bill number"
+                inputMode="numeric"
+                className="h-11 w-52 pl-9"
+                aria-label="Find bill number"
+              />
+            </div>
+          </div>
+          <div className="max-h-[32rem] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card">
+                <tr className="border-b border-border text-left">
+                  <th className="py-2">Bill</th>
+                  <th className="py-2">{multiDay ? "Date & time" : "Time"}</th>
+                  <th className="py-2">Where</th>
+                  <th className="py-2 text-right">Items</th>
+                  <th className="py-2 pl-8">Payment</th>
+                  <th className="py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shownBills.map((bill) => (
+                  <tr
+                    key={bill.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open bill #${bill.bill_number}`}
+                    className="cursor-pointer border-b border-border/60 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                    onClick={() => setOpenBill(bill.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setOpenBill(bill.id);
+                      }
+                    }}
+                  >
+                    <td className="py-3 font-semibold">#{bill.bill_number}</td>
+                    <td className="py-3 whitespace-nowrap">{billTime(bill.completed_at)}</td>
+                    <td className="py-3">
+                      {bill.order_type === "PARCEL"
+                        ? orderTypeLabel(bill.order_type)
+                        : `Table ${bill.table_label ?? "—"}`}
+                    </td>
+                    <td className="py-3 text-right">{bill.item_count}</td>
+                    <td className="py-3 pl-8">{paymentLabel(bill.payment_method)}</td>
+                    <td className="py-3 text-right font-semibold">{inr(Number(bill.total))}</td>
+                  </tr>
+                ))}
+                {!reportQuery.isLoading && shownBills.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-muted-foreground">
+                      {search
+                        ? `No bill matching "${billSearch}" in this period.`
+                        : "No settled bills in this period."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="p-5">
           <h2 className="mb-3 text-xl font-bold">Item-wise sales</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -207,6 +298,8 @@ function Reports() {
           </div>
         </Card>
       </main>
+
+      <BillDialog orderId={openBill} onClose={() => setOpenBill(null)} />
     </div>
   );
 }

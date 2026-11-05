@@ -158,6 +158,117 @@ describe("inventory", () => {
   });
 });
 
+describe("recipes and low stock", () => {
+  const stock = (id: string) =>
+    (store.inventoryItems() as { id: string; current_quantity: number }[]).find((i) => i.id === id)!
+      .current_quantity;
+
+  test("settling a bill takes each dish's ingredients out of stock, in the stock's unit", () => {
+    const onion = store.saveInventoryItem(null, {
+      name: "Onion",
+      unit: "kg",
+      opening_quantity: 100,
+    });
+    const rice = store.saveInventoryItem(null, { name: "Rice", unit: "kg", opening_quantity: 10 });
+    const dal = menuItem("Dal Tadka");
+    const kadai = menuItem("Mixed Veg Kadai");
+    store.saveMenuItem(dal.id, {
+      ingredients: [
+        { inventory_item_id: onion.id, quantity: 50, unit: "g" },
+        { inventory_item_id: rice.id, quantity: 40, unit: "g" },
+      ],
+    });
+    store.saveMenuItem(kadai.id, {
+      ingredients: [{ inventory_item_id: onion.id, quantity: 0.1, unit: "kg" }],
+    });
+
+    const o = store.createOrder(null);
+    store.addItem(o.id, dal.id);
+    store.addItem(o.id, dal.id); // 2 dal
+    store.addItem(o.id, kadai.id); // 1 kadai
+    expect(stock(onion.id)).toBe(100); // nothing used until the bill is settled
+    store.settle(o.id, { payment_method: "CASH" });
+
+    expect(stock(onion.id)).toBe(99.8); // 2 × 50 g + 100 g
+    expect(stock(rice.id)).toBe(9.92); // 2 × 40 g
+    const [latest] = store.inventoryMovements(1);
+    expect(latest).toMatchObject({ movement_type: "used", note: "Bill #1001" });
+  });
+
+  test("billing never fails for lack of stock; stock stops at zero", () => {
+    const paneer = store.saveInventoryItem(null, {
+      name: "Paneer",
+      unit: "kg",
+      opening_quantity: 0.1,
+    });
+    const tikka = menuItem("Paneer Tikka");
+    store.saveMenuItem(tikka.id, {
+      ingredients: [{ inventory_item_id: paneer.id, quantity: 200, unit: "g" }],
+    });
+    const o = store.createOrder(null);
+    store.addItem(o.id, tikka.id);
+    expect(() => store.settle(o.id, {})).not.toThrow();
+    expect(stock(paneer.id)).toBe(0);
+  });
+
+  test("discarded bills and inactive stock items use nothing", () => {
+    const milk = store.saveInventoryItem(null, { name: "Milk", unit: "L", opening_quantity: 5 });
+    const chai = menuItem("Masala Chai");
+    store.saveMenuItem(chai.id, {
+      ingredients: [{ inventory_item_id: milk.id, quantity: 150, unit: "ml" }],
+    });
+    const a = store.createOrder(null);
+    store.addItem(a.id, chai.id);
+    store.discardOrder(a.id);
+    store.setInventoryActive(milk.id, false);
+    const b = store.createOrder(null);
+    store.addItem(b.id, chai.id);
+    store.settle(b.id, {});
+    expect(stock(milk.id)).toBe(5);
+  });
+
+  test("recipe units must match the stock unit's kind", () => {
+    const milk = store.saveInventoryItem(null, { name: "Milk", unit: "L" });
+    const chai = menuItem("Masala Chai");
+    expect(() =>
+      store.saveMenuItem(chai.id, {
+        ingredients: [{ inventory_item_id: milk.id, quantity: 100, unit: "g" }],
+      }),
+    ).toThrow("can't be measured in g");
+    store.saveMenuItem(chai.id, {
+      ingredients: [{ inventory_item_id: milk.id, quantity: 100, unit: "ml" }],
+    });
+    // Changing Milk to kg would break the chai recipe.
+    expect(() => store.saveInventoryItem(milk.id, { name: "Milk", unit: "kg" })).toThrow(
+      "Dishes use Milk in ml",
+    );
+    expect(store.menuIngredients()).toEqual([
+      expect.objectContaining({
+        menu_item_id: chai.id,
+        quantity: 100,
+        unit: "ml",
+        inventory_name: "Milk",
+      }),
+    ]);
+  });
+
+  test("minimum stock level is saved and kept when not sent", () => {
+    const onion = store.saveInventoryItem(null, { name: "Onion", unit: "kg", low_stock_level: 5 });
+    const level = () =>
+      (store.inventoryItems() as { id: string; low_stock_level: number | null }[]).find(
+        (i) => i.id === onion.id,
+      )!.low_stock_level;
+    expect(level()).toBe(5);
+    store.saveInventoryItem(onion.id, { name: "Onions", unit: "kg" });
+    expect(level()).toBe(5);
+    store.saveInventoryItem(onion.id, { name: "Onions", unit: "kg", low_stock_level: null });
+    expect(level()).toBeNull();
+    expect(() =>
+      store.saveInventoryItem(onion.id, { name: "Onions", low_stock_level: -1 }),
+    ).toThrow("Minimum stock");
+  });
+});
+
 describe("reports", () => {
   test("only completed orders in range are included", () => {
     const a = store.createOrder(null);
@@ -166,6 +277,13 @@ describe("reports", () => {
     store.createOrder(null); // open, not counted
     const r = store.report("2000-01-01T00:00:00.000Z", "2999-01-01T00:00:00.000Z");
     expect(r.orders).toHaveLength(1);
+    expect(r.orders[0]).toMatchObject({
+      bill_number: 1001,
+      order_type: "PARCEL",
+      table_label: null,
+      item_count: 1,
+      total: 60,
+    });
     expect(r.lines).toEqual([{ item_name: "Garlic Naan", quantity: 1, unit_price: 60 }]);
     expect(store.todayStats("2000-01-01T00:00:00.000Z")).toEqual({
       sales: 60,

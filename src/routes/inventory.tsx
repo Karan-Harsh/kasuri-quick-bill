@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { History, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, History, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
@@ -27,11 +27,13 @@ import {
 import {
   formatQuantity,
   INVENTORY_UNITS,
+  isLowStock,
   movementHint,
   movementLabel,
   type InventoryMovementType,
   type InventoryUnit,
 } from "@/lib/inventory";
+import { useInventoryItems } from "@/lib/low-stock";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({ meta: [{ title: "Inventory — Kasuri" }] }),
@@ -43,6 +45,8 @@ interface ItemForm {
   name: string;
   unit: InventoryUnit;
   current_quantity: string;
+  /** Warn below this amount. Empty = no warning. */
+  low_stock_level: string;
   is_active: boolean;
 }
 
@@ -58,6 +62,7 @@ const emptyForm = (): ItemForm => ({
   name: "",
   unit: "kg",
   current_quantity: "0",
+  low_stock_level: "",
   is_active: true,
 });
 
@@ -68,20 +73,7 @@ function InventoryPage() {
   const [movementQty, setMovementQty] = useState("");
   const [movementNote, setMovementNote] = useState("");
 
-  const itemsQuery = useQuery({
-    queryKey: ["inventory-items"],
-    queryFn: () =>
-      api.get<
-        {
-          id: string;
-          name: string;
-          unit: string;
-          current_quantity: number;
-          is_active: boolean;
-          updated_at: string;
-        }[]
-      >("/inventory/items"),
-  });
+  const itemsQuery = useInventoryItems();
 
   const movementsQuery = useQuery({
     queryKey: ["inventory-movements"],
@@ -111,8 +103,15 @@ function InventoryPage() {
       const qty = Number(input.current_quantity);
       if (!name) throw new Error("Item name is required");
       if (Number.isNaN(qty) || qty < 0) throw new Error("Starting quantity must be zero or more");
+      const low = input.low_stock_level.trim();
+      if (low !== "" && !(Number(low) >= 0)) throw new Error("Minimum stock must be zero or more");
 
-      const payload = { name, unit: input.unit, is_active: input.is_active };
+      const payload = {
+        name,
+        unit: input.unit,
+        is_active: input.is_active,
+        low_stock_level: low === "" ? null : Number(low),
+      };
       if (input.id) await api.put(`/inventory/items/${input.id}`, payload);
       else await api.post("/inventory/items", { ...payload, opening_quantity: qty });
     },
@@ -150,7 +149,11 @@ function InventoryPage() {
 
   const items = itemsQuery.data ?? [];
   const movements = movementsQuery.data ?? [];
-  const activeItems = items.filter((item) => item.is_active);
+  // Low items first so they are seen straight away.
+  const activeItems = items
+    .filter((item) => item.is_active)
+    .sort((a, b) => Number(isLowStock(b)) - Number(isLowStock(a)));
+  const lowItems = activeItems.filter(isLowStock);
 
   return (
     <div className="min-h-screen bg-background">
@@ -160,68 +163,125 @@ function InventoryPage() {
           <div>
             <h1 className="text-3xl font-bold">Inventory</h1>
             <p className="mt-1 text-muted-foreground">
-              Track what is in the kitchen. Update each night with what was used or what is left.
+              Track what is in the kitchen. Dishes with a recipe use up stock automatically when
+              their bill is settled. Add recipes from the Menu screen.
             </p>
           </div>
-          <Button className="h-12 text-base" onClick={() => setForm(emptyForm())}>
-            <Plus className="mr-2 size-5" /> Add item
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="h-12 text-base">
+              <Link to="/settings" hash="excel-setup">
+                <FileSpreadsheet className="mr-2 size-5" /> Add many from Excel
+              </Link>
+            </Button>
+            <Button className="h-12 text-base" onClick={() => setForm(emptyForm())}>
+              <Plus className="mr-2 size-5" /> Add item
+            </Button>
+          </div>
         </div>
 
+        {lowItems.length > 0 && (
+          <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4 text-destructive">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="font-semibold">
+                {lowItems.length === 1
+                  ? "1 item is below its minimum stock"
+                  : `${lowItems.length} items are below their minimum stock`}
+              </p>
+              <p className="text-sm">
+                {lowItems
+                  .map(
+                    (item) =>
+                      `${item.name} (${formatQuantity(Number(item.current_quantity), item.unit)} left)`,
+                  )
+                  .join(", ")}
+              </p>
+            </div>
+          </Card>
+        )}
+
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {activeItems.map((item) => (
-            <Card key={item.id} className="space-y-4 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-lg font-semibold">{item.name}</p>
-                  <p className="text-3xl font-extrabold text-primary">
-                    {formatQuantity(Number(item.current_quantity), item.unit)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Updated {new Date(item.updated_at).toLocaleString("en-IN")}
-                  </p>
-                </div>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="size-9"
-                  onClick={() =>
-                    setForm({
-                      id: item.id,
-                      name: item.name,
-                      unit: item.unit as InventoryUnit,
-                      current_quantity: String(Number(item.current_quantity)),
-                      is_active: item.is_active,
-                    })
-                  }
-                >
-                  <Pencil className="size-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {(["used", "received", "count"] as InventoryMovementType[]).map((type) => (
+          {activeItems.map((item) => {
+            const low = isLowStock(item);
+            return (
+              <Card
+                key={item.id}
+                className={`space-y-4 p-4 ${low ? "border-destructive bg-destructive/5" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="flex items-center gap-2 text-lg font-semibold">
+                      {item.name}
+                      {low && (
+                        <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-bold text-destructive-foreground">
+                          Low
+                        </span>
+                      )}
+                    </p>
+                    <p
+                      className={`text-3xl font-extrabold ${low ? "text-destructive" : "text-primary"}`}
+                    >
+                      {formatQuantity(Number(item.current_quantity), item.unit)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.low_stock_level != null
+                        ? `Minimum ${formatQuantity(Number(item.low_stock_level), item.unit)}`
+                        : "No minimum set"}
+                      {" · "}
+                      {item.dish_count > 0
+                        ? `Used in ${item.dish_count} dish${item.dish_count === 1 ? "" : "es"}`
+                        : "Not in any recipe"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Updated {new Date(item.updated_at).toLocaleString("en-IN")}
+                    </p>
+                  </div>
                   <Button
-                    key={type}
-                    variant={type === "count" ? "default" : "outline"}
-                    className="h-11 text-sm"
-                    onClick={() => {
-                      setMovement({
-                        itemId: item.id,
-                        itemName: item.name,
-                        unit: item.unit,
-                        currentQuantity: Number(item.current_quantity),
-                        type,
-                      });
-                      setMovementQty(type === "count" ? String(Number(item.current_quantity)) : "");
-                      setMovementNote("");
-                    }}
+                    size="icon"
+                    variant="outline"
+                    className="size-9"
+                    onClick={() =>
+                      setForm({
+                        id: item.id,
+                        name: item.name,
+                        unit: item.unit as InventoryUnit,
+                        current_quantity: String(Number(item.current_quantity)),
+                        low_stock_level:
+                          item.low_stock_level == null ? "" : String(Number(item.low_stock_level)),
+                        is_active: item.is_active,
+                      })
+                    }
                   >
-                    {movementLabel(type)}
+                    <Pencil className="size-4" />
                   </Button>
-                ))}
-              </div>
-            </Card>
-          ))}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["used", "received", "count"] as InventoryMovementType[]).map((type) => (
+                    <Button
+                      key={type}
+                      variant={type === "count" ? "default" : "outline"}
+                      className="h-11 text-sm"
+                      onClick={() => {
+                        setMovement({
+                          itemId: item.id,
+                          itemName: item.name,
+                          unit: item.unit,
+                          currentQuantity: Number(item.current_quantity),
+                          type,
+                        });
+                        setMovementQty(
+                          type === "count" ? String(Number(item.current_quantity)) : "",
+                        );
+                        setMovementNote("");
+                      }}
+                    >
+                      {movementLabel(type)}
+                    </Button>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
           {itemsQuery.isLoading && <p className="text-muted-foreground">Loading inventory…</p>}
           {!itemsQuery.isLoading && activeItems.length === 0 && (
             <Card className="p-6 text-muted-foreground sm:col-span-2 lg:col-span-3">
@@ -360,6 +420,19 @@ function InventoryPage() {
                     disabled={Boolean(form.id)}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invLow">Warn when stock goes below ({form.unit})</Label>
+                <Input
+                  id="invLow"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={form.low_stock_level}
+                  onChange={(e) => setForm({ ...form, low_stock_level: e.target.value })}
+                  placeholder="e.g. 5 — leave empty for no warning"
+                  className="h-11"
+                />
               </div>
               {form.id && (
                 <p className="text-sm text-muted-foreground">
