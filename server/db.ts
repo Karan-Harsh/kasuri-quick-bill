@@ -250,11 +250,14 @@ export function openDatabase(path: string, opts: { starterMenu?: StarterMenuName
       if ((opts.starterMenu ?? "kasuri") === "kasuri") {
         seedStarterStaff(db);
         seedStarterInventory(db);
+        markDone(db, STAFF_DONE);
+        markDone(db, STOCK_DONE);
       }
     })();
   } else {
     replaceUntouchedDemoMenu(db);
     mergeHalfFullPairs(db);
+    fillMissingStarterData(db);
   }
   return db;
 }
@@ -361,7 +364,33 @@ export function seedStarterData(db: Database, which: StarterMenuName = "kasuri")
   return { tables, menuItems };
 }
 
-/** Adds Kasuri's staff. Only called when a new database is created. */
+const STAFF_DONE = "starter_staff_added";
+const STOCK_DONE = "starter_stock_added";
+const isDone = (db: Database, key: string) =>
+  Boolean(db.query("SELECT 1 FROM app_settings WHERE key = $k").get({ k: key }));
+const markDone = (db: Database, key: string) =>
+  db.query("INSERT OR IGNORE INTO app_settings (key, value) VALUES ($k, 'true')").run({ k: key });
+
+/**
+ * Copies created before the staff list and starting stock were built in get them once:
+ * the staff if there are no staff yet, the stock items (with prices) and recipes if there are no
+ * stock items yet. Recorded in app_settings so it never happens again (deleting everyone later
+ * doesn't bring them back), and copies that already have staff or stock are left alone.
+ */
+export function fillMissingStarterData(db: Database) {
+  db.transaction(() => {
+    if (!isDone(db, STAFF_DONE)) {
+      if (!db.query("SELECT 1 FROM employees LIMIT 1").get()) seedStarterStaff(db);
+      markDone(db, STAFF_DONE);
+    }
+    if (!isDone(db, STOCK_DONE)) {
+      if (!db.query("SELECT 1 FROM inventory_items LIMIT 1").get()) seedStarterInventory(db);
+      markDone(db, STOCK_DONE);
+    }
+  })();
+}
+
+/** Adds Kasuri's staff (new databases, or once for older ones without staff). */
 function seedStarterStaff(db: Database) {
   for (const e of KASURI_STAFF) {
     db.query(

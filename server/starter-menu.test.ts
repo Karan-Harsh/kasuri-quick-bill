@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mergeHalfFullPairs, openDatabase, replaceUntouchedDemoMenu } from "./db";
+import {
+  fillMissingStarterData,
+  mergeHalfFullPairs,
+  openDatabase,
+  replaceUntouchedDemoMenu,
+} from "./db";
 import { Store } from "./store";
 
 const dishes = (store: Store) =>
@@ -76,6 +81,35 @@ describe("starting menu", () => {
     expect(() => store.addItem(store.createOrder(null).id, veg.id, "half")).toThrow(
       "no half plate",
     );
+  });
+
+  test("an older copy without staff or stock gets them once, and only once", () => {
+    // Like a copy made before staff and stock were built in: the Kasuri menu, nothing else.
+    const db = openDatabase(":memory:", { starterMenu: "demo" });
+    replaceUntouchedDemoMenu(db);
+    db.exec("DELETE FROM menu_item_ingredients; DELETE FROM inventory_items");
+    const store = new Store(db);
+    expect(store.staff.employees()).toHaveLength(0);
+
+    fillMissingStarterData(db);
+    expect(store.staff.employees()).toHaveLength(7);
+    expect(store.inventoryItems()).toHaveLength(39);
+    expect((store.menuIngredients() as unknown[]).length).toBeGreaterThan(900);
+
+    // Deleting everyone later doesn't bring them back.
+    for (const e of store.staff.employees()) store.staff.deleteEmployee(e.id);
+    fillMissingStarterData(db);
+    expect(store.staff.employees()).toHaveLength(0);
+  });
+
+  test("a copy that already has staff or stock is left alone", () => {
+    const db = openDatabase(":memory:", { starterMenu: "demo" });
+    const store = new Store(db);
+    store.staff.createEmployee({ name: "Someone", monthly_salary: 1000, join_date: "2026-01-01" });
+    store.saveInventoryItem(null, { name: "Rice", unit: "kg" });
+    fillMissingStarterData(db);
+    expect(store.staff.employees()).toHaveLength(1);
+    expect(store.inventoryItems()).toHaveLength(1);
   });
 
   test("old Half/Full dish pairs are merged into one dish with a half price", () => {
