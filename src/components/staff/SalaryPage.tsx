@@ -17,7 +17,18 @@ import {
   PageHeader,
 } from "./ui";
 import { confirmAction, saveTextFile } from "./desktop";
-import { dateLabel, fmtNum, monthLabel, thisMonth, toCSV, today, useMoney } from "./format";
+import {
+  dateLabel,
+  fmtNum,
+  monthLabel,
+  payDueDate,
+  periodLabel,
+  thisMonth,
+  toCSV,
+  today,
+  useMoney,
+  useSettings,
+} from "./format";
 
 export const PAY_METHODS = ["Cash", "UPI", "Bank transfer", "Cheque"];
 
@@ -39,6 +50,7 @@ export default function PayrollPage() {
   const leftToPay = unpaidEntries.reduce((s, p) => s + p.line.net_pay, 0);
   const leaveCuts = entries.reduce((s, p) => s + p.line.leave_deduction, 0);
   const inProgress = month >= thisMonth();
+  const { settings } = useSettings();
   const shown = filter === "paid" ? paidEntries : filter === "unpaid" ? unpaidEntries : entries;
 
   async function undo(p: PayrollEntry) {
@@ -75,6 +87,7 @@ export default function PayrollPage() {
         "Status",
         "Paid on",
         "Method",
+        "Pay period",
       ],
       ...data.map(({ line: l, payment }) => [
         l.name,
@@ -93,6 +106,7 @@ export default function PayrollPage() {
         payment ? "Paid" : "Unpaid",
         payment?.paid_on ?? "",
         payment?.method ?? "",
+        l.period_start && l.period_end ? `${l.period_start} to ${l.period_end}` : l.month,
       ]),
     ];
     saveTextFile(`salary-${month}.csv`, toCSV(rows), { name: "Spreadsheet (CSV)", ext: "csv" });
@@ -103,9 +117,15 @@ export default function PayrollPage() {
       <PageHeader
         title="Salary"
         subtitle={
-          inProgress
-            ? `${monthLabel(month)} is still running. Amounts assume full attendance for the remaining days.`
-            : `Salaries for ${monthLabel(month)}`
+          settings.pay_cycle === "joining"
+            ? `Pay periods ending in ${monthLabel(month)}: each person is paid a month after the day they joined.${
+                inProgress
+                  ? " Periods not finished yet assume full attendance for the days left."
+                  : ""
+              }`
+            : inProgress
+              ? `${monthLabel(month)} is still running. Amounts assume full attendance for the remaining days.`
+              : `Salaries for ${monthLabel(month)}`
         }
         actions={
           <>
@@ -374,9 +394,19 @@ function Tags({ line: l }: { line: PayrollLine }) {
   if (l.eligible_days < l.days_in_month)
     tags.push(
       <Tag key="join" tone="stone">
-        Joined mid-month
+        Joined part-way
       </Tag>,
     );
+  // Each person's own pay period when paid from their joining date.
+  if (periodLabel(l) !== monthLabel(l.month)) {
+    const due = payDueDate(l);
+    tags.unshift(
+      <Tag key="period" tone="stone">
+        {periodLabel(l)}
+        {due ? ` · due ${dateLabel(due, { day: "numeric", month: "short" })}` : ""}
+      </Tag>,
+    );
+  }
   return <>{tags}</>;
 }
 
@@ -463,7 +493,7 @@ export function PayModal({
       <form onSubmit={submit} className="space-y-4">
         {error && <ErrorBox message={error} />}
         <div className="rounded-lg bg-primary/10 p-4 text-center">
-          <div className="text-sm text-muted-foreground">Salary for {monthLabel(month)}</div>
+          <div className="text-sm text-muted-foreground">Salary for {periodLabel(entry.line)}</div>
           <div className="text-3xl font-bold text-primary">{money(entry.live.net_pay)}</div>
         </div>
         <Field label="Amount paid" hint="Change only if you are paying a different amount">

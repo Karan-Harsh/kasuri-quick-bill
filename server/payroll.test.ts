@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { calculatePayroll, daysInMonth } from "../src/lib/payroll";
+import { calculatePayroll, daysInMonth, payPeriod } from "../src/lib/payroll";
 import type {
   Adjustment,
   AttendanceRecord,
@@ -13,6 +13,7 @@ const settings: Settings = {
   currency_symbol: "₹",
   per_day_basis: "calendar",
   pay_unused_leaves: false,
+  pay_cycle: "calendar",
 };
 
 const emp: Employee = {
@@ -149,5 +150,62 @@ describe("calculatePayroll", () => {
     const r = calculatePayroll(emp, "2025-11", [], [], { ...settings, pay_unused_leaves: true });
     expect(r.unused_leaves).toBe(2);
     expect(r.net_pay).toBe(32000);
+  });
+});
+
+describe("pay period from the joining date (17th to 17th)", () => {
+  const joining: Settings = { ...settings, pay_cycle: "joining" };
+  // Bishnu, head chef: joined 17 May 2026 on ₹24,000.
+  const bishnu: Employee = {
+    ...emp,
+    name: "Bishnu",
+    monthly_salary: 24000,
+    join_date: "2026-05-17",
+  };
+
+  it("June's period is 17 May – 16 June, paid in full", () => {
+    expect(payPeriod(bishnu, "2026-06", joining)).toEqual({
+      start: "2026-05-17",
+      end: "2026-06-16",
+    });
+    const r = calculatePayroll(bishnu, "2026-06", [], [], joining);
+    expect(r).toMatchObject({
+      period_start: "2026-05-17",
+      period_end: "2026-06-16",
+      days_in_month: 31,
+      eligible_days: 31,
+      net_pay: 24000,
+    });
+    expect(payPeriod(bishnu, "2026-07", joining)).toEqual({
+      start: "2026-06-17",
+      end: "2026-07-16",
+    });
+  });
+
+  it("counts leaves, overtime and advances inside the period only", () => {
+    const r = calculatePayroll(
+      { ...bishnu, allowed_leaves: 0, overtime_rate: 100 },
+      "2026-06",
+      [att("2026-05-20", "A", 0), att("2026-06-16", "P", 2), att("2026-06-17", "A")],
+      [adj("advance", 3000, "2026-06-05"), adj("advance", 1000, "2026-06-20")],
+      joining,
+    );
+    // One absence (₹24,000 / 31 days ≈ ₹774), 2 h overtime, only the 5 June advance.
+    expect(r).toMatchObject({ absent_days: 1, overtime_hours: 2, advance: 3000 });
+    expect(r.net_pay).toBe(Math.round(24000 - 24000 / 31 + 200 - 3000));
+  });
+
+  it("handles joining on a day some months don't have", () => {
+    const late = { ...emp, join_date: "2026-01-31" };
+    expect(payPeriod(late, "2026-02", joining)).toEqual({ start: "2026-01-31", end: "2026-02-27" });
+    expect(payPeriod(late, "2026-03", joining)).toEqual({ start: "2026-02-28", end: "2026-03-30" });
+    expect(payPeriod(late, "2026-04", joining)).toEqual({ start: "2026-03-31", end: "2026-04-29" });
+  });
+
+  it("someone who joined on the 1st is paid by calendar month", () => {
+    expect(payPeriod({ join_date: "2026-03-01" }, "2026-06", joining)).toEqual({
+      start: "2026-06-01",
+      end: "2026-06-30",
+    });
   });
 });

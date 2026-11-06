@@ -7,7 +7,16 @@ import { staffApi, useLoad } from "@/lib/staff-api";
 import { confirmAction } from "./desktop";
 import EmployeeForm from "./EmployeeForm";
 import { Avatar, Badge, Button, Card, cx, ErrorBox, Loading, MonthPicker, statusStyle } from "./ui";
-import { dateLabel, fmtNum, monthLabel, thisMonth, today, useMoney, weekday } from "./format";
+import {
+  dateLabel,
+  fmtNum,
+  monthLabel,
+  periodLabel,
+  thisMonth,
+  today,
+  useMoney,
+  weekday,
+} from "./format";
 import { ADJ_TYPES, AdjustmentForm } from "./AdvancesPage";
 
 export default function EmployeeDetailPage({ id }: { id: number }) {
@@ -161,7 +170,9 @@ export default function EmployeeDetailPage({ id }: { id: number }) {
         </Card>
 
         <Card className="p-5 lg:col-span-2">
-          <h2 className="mb-3 font-semibold">Salary for {monthLabel(month)}</h2>
+          <h2 className="mb-3 font-semibold">
+            Salary for {line ? periodLabel(line) : monthLabel(month)}
+          </h2>
           {!line ? (
             <p className="text-muted-foreground">Not on payroll this month.</p>
           ) : (

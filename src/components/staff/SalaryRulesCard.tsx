@@ -16,6 +16,15 @@ const BASES = [
   ["fixed30", "Salary ÷ 30, always", "e.g. ₹10,000 salary: one leave always cuts ₹333"],
 ] as const;
 
+const CYCLES = [
+  [
+    "joining",
+    "From each person's joining date",
+    "Joined on the 17th: 17th to 16th, paid on the 17th of the next month",
+  ],
+  ["calendar", "Calendar month", "Everyone from the 1st to the last day of the month"],
+] as const;
+
 /** Settings → Salary rules: how leave cuts and unused leaves are worked out. Saves on change. */
 export function SalaryRulesCard() {
   const queryClient = useQueryClient();
@@ -36,9 +45,33 @@ export function SalaryRulesCard() {
         <div>
           <h2 className="text-xl font-bold">Salary rules</h2>
           <p className="text-sm text-muted-foreground">
-            Salary is fixed per calendar month: someone who works the full month gets their full
-            salary, whether the month has 28, 30 or 31 days.
+            Salary is fixed per month: someone who works a full month gets their full salary,
+            whether that month has 28, 30 or 31 days.
           </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="font-medium">When is salary paid?</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {CYCLES.map(([value, title, hint]) => (
+            <label
+              key={value}
+              className={`cursor-pointer rounded-lg border p-3 ${
+                settings.pay_cycle === value ? "border-primary bg-primary/10" : "border-border"
+              }`}
+            >
+              <input
+                type="radio"
+                name="payCycle"
+                className="sr-only"
+                checked={settings.pay_cycle === value}
+                onChange={() => save.mutate({ pay_cycle: value })}
+              />
+              <span className="block font-medium">{title}</span>
+              <span className="block text-sm text-muted-foreground">{hint}</span>
+            </label>
+          ))}
         </div>
       </div>
 

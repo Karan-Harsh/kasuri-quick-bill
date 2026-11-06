@@ -52,6 +52,11 @@ export interface Settings {
   per_day_basis: "calendar" | "fixed30";
   /** pay extra for each allowed leave not taken */
   pay_unused_leaves: boolean;
+  /**
+   * 'joining' = each person's pay period runs from the day of the month they joined
+   * (joined on the 17th: 17th to 16th, paid on the 17th); 'calendar' = 1st to last day of the month.
+   */
+  pay_cycle: "joining" | "calendar";
 }
 
 export interface PayrollLine {
@@ -61,8 +66,12 @@ export interface PayrollLine {
   month: string;
   monthly_salary: number;
   per_day_rate: number;
+  /** Days in the pay period (the whole calendar month when paid by calendar month). */
   days_in_month: number;
   eligible_days: number;
+  /** First and last day of the pay period (YYYY-MM-DD). Missing on payments saved before pay periods. */
+  period_start?: string;
+  period_end?: string;
   base_pay: number;
   absent_days: number;
   half_days: number;

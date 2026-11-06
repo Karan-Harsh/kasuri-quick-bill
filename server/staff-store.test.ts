@@ -76,6 +76,35 @@ describe("staff", () => {
     expect(() => staff().saveSettings({ per_day_basis: "weekly" as never })).toThrow("Invalid");
   });
 
+  test("each person shows from their first full pay period (joining-date cycle)", () => {
+    staff().saveSettings({ pay_cycle: "joining" });
+    staff().createEmployee({
+      name: "Bishnu",
+      role: "Head chef",
+      monthly_salary: 24000,
+      join_date: "2026-05-17",
+    });
+    staff().createEmployee({
+      name: "Rupchand",
+      role: "Waiter",
+      monthly_salary: 11000,
+      join_date: "2026-06-10",
+    });
+    const names = (month: string) =>
+      staff()
+        .payroll(month)
+        .map((e) => e.line.name);
+    expect(names("2026-05")).toEqual([]); // Bishnu's first period ends 16 June
+    expect(names("2026-06")).toEqual(["Bishnu"]); // Rupchand's first period ends 9 July
+    expect(names("2026-07")).toEqual(["Bishnu", "Rupchand"]);
+    const [b] = staff().payroll("2026-06");
+    expect(b!.line).toMatchObject({
+      period_start: "2026-05-17",
+      period_end: "2026-06-16",
+      net_pay: 24000,
+    });
+  });
+
   test("deleting a person removes their records too", () => {
     const r = ravi();
     staff().saveAttendance([{ employee_id: r.id, date: "2026-01-05", status: "A" }]);

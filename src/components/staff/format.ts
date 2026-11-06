@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS: Settings = {
   currency_symbol: "₹",
   per_day_basis: "calendar",
   pay_unused_leaves: false,
+  pay_cycle: "joining",
 };
 
 /** Restaurant name and salary rules (shared cache with Settings → Salary rules). */
@@ -85,4 +86,27 @@ export function toCSV(rows: (string | number)[][]) {
       r.map((c) => (/[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(","),
     )
     .join("\n");
+}
+
+/** "17 May – 16 Jun 2026" for a pay period, or "June 2026" when it is a whole calendar month. */
+export function periodLabel(line: {
+  month: string;
+  period_start?: string;
+  period_end?: string;
+}): string {
+  const { period_start: start, period_end: end } = line;
+  if (
+    !start ||
+    !end ||
+    (start.endsWith("-01") && start.slice(0, 7) === line.month && end.slice(0, 7) === line.month)
+  )
+    return monthLabel(line.month);
+  const sameYear = start.slice(0, 4) === end.slice(0, 4);
+  return `${dateLabel(start, sameYear ? { day: "numeric", month: "short" } : undefined)} – ${dateLabel(end)}`;
+}
+
+/** The day salary for a period is due: the day after it ends (joined on the 17th → paid on the 17th). */
+export function payDueDate(line: { period_end?: string }): string | null {
+  if (!line.period_end) return null;
+  return shiftDate(line.period_end, 1);
 }

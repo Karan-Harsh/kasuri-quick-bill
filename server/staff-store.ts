@@ -1,7 +1,7 @@
 // Staff, attendance and salary rules (merged in from the Kasuri Staff & Salary app).
 // The salary calculation itself is in src/lib/payroll.ts, shared with the screens.
 import type { Database } from "bun:sqlite";
-import { calculatePayroll, monthDates } from "../src/lib/payroll";
+import { calculatePayroll, monthDates, payPeriod } from "../src/lib/payroll";
 import type {
   Adjustment,
   AttendanceRecord,
@@ -25,6 +25,7 @@ export interface PayrollEntry {
 const SALARY_KEYS = {
   per_day_basis: "salary_per_day_basis",
   pay_unused_leaves: "salary_pay_unused_leaves",
+  pay_cycle: "salary_pay_cycle",
 } as const;
 
 const STATUSES: AttendanceStatus[] = ["P", "A", "H", "L", "O"];
@@ -40,6 +41,12 @@ function num(v: unknown, field: string, { min = 0 } = {}): number {
   if (v === "" || v === null || v === undefined || !Number.isFinite(n) || n < min)
     throw new AppError(`${field} must be a number of at least ${min}`);
   return n;
+}
+
+function previousMonth(month: string) {
+  const [y = 0, m = 0] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthOrThrow(month: unknown): string {
@@ -78,10 +85,14 @@ export class StaffStore {
       currency_symbol: "₹",
       per_day_basis: read(SALARY_KEYS.per_day_basis) === "fixed30" ? "fixed30" : "calendar",
       pay_unused_leaves: read(SALARY_KEYS.pay_unused_leaves) === true,
+      // Kasuri pays each person a month after the day they joined (17th to 17th).
+      pay_cycle: read(SALARY_KEYS.pay_cycle) === "calendar" ? "calendar" : "joining",
     };
   }
 
-  saveSettings(patch: Partial<Pick<Settings, "per_day_basis" | "pay_unused_leaves">>) {
+  saveSettings(
+    patch: Partial<Pick<Settings, "per_day_basis" | "pay_unused_leaves" | "pay_cycle">>,
+  ) {
     const save = (key: string, value: unknown) =>
       this.run(
         "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -95,6 +106,11 @@ export class StaffStore {
     }
     if (patch.pay_unused_leaves !== undefined)
       save(SALARY_KEYS.pay_unused_leaves, patch.pay_unused_leaves === true);
+    if (patch.pay_cycle !== undefined) {
+      if (patch.pay_cycle !== "joining" && patch.pay_cycle !== "calendar")
+        throw new AppError("Invalid pay cycle");
+      save(SALARY_KEYS.pay_cycle, patch.pay_cycle);
+    }
     return this.settings();
   }
 
@@ -247,7 +263,9 @@ export class StaffStore {
 
   payroll(month: string): PayrollEntry[] {
     const dates = monthDates(monthOrThrow(month));
-    const [first, last] = [dates[0]!, dates[dates.length - 1]!];
+    const last = dates[dates.length - 1]!;
+    // A pay period can start in the month before (joined on the 17th: 17 May – 16 June).
+    const first = monthDates(previousMonth(month))[0]!;
     const settings = this.settings();
     const employees = this.all<Employee>(
       "SELECT * FROM employees WHERE join_date <= ? ORDER BY name COLLATE NOCASE",
@@ -279,10 +297,12 @@ export class StaffStore {
         adjustments.some((a) => a.employee_id === e.id),
     );
 
-    return relevant.map((e) => {
+    return relevant.flatMap((e) => {
       const payment = paidBy.get(e.id) ?? null;
+      // Not working here yet in this period (e.g. joined on 10 June: June's period is 10 May – 9 June).
+      if (!payment && payPeriod(e, month, settings).end < e.join_date) return [];
       const live = calculatePayroll(e, month, attendance, adjustments, settings);
-      return { line: payment ? payment.snapshot : live, live, payment };
+      return [{ line: payment ? payment.snapshot : live, live, payment }];
     });
   }
 

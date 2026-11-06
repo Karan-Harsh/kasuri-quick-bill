@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { staffApi, useLoad } from "@/lib/staff-api";
 import { Badge, Button, Card, ErrorBox, Loading } from "./ui";
-import { dateLabel, fmtNum, monthLabel, useMoney, useSettings } from "./format";
+import { dateLabel, fmtNum, periodLabel, useMoney, useSettings } from "./format";
 import { PayModal } from "./SalaryPage";
 
 export default function PayslipPage({ month, employeeId }: { month: string; employeeId: string }) {
@@ -83,7 +83,7 @@ export default function PayslipPage({ month, employeeId }: { month: string; empl
         <div className="flex items-start justify-between border-b border-border pb-4">
           <div>
             <div className="text-xl font-bold">{settings.restaurant_name}</div>
-            <div className="text-muted-foreground">Salary slip · {monthLabel(month)}</div>
+            <div className="text-muted-foreground">Salary slip · {periodLabel(entry.line)}</div>
           </div>
           {entry.payment ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">Not paid</Badge>}
         </div>
