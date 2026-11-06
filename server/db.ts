@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { DEMO_MENU, DEMO_TAX, flattenMenu, KASURI_MENU } from "./starter-menu";
+import { KASURI_STAFF, STARTER_ALLOWED_LEAVES } from "./starter-staff";
 
 // Database schema. Ids are text UUIDs (used in screen URLs such as /order/$orderId).
 const SCHEMA = `
@@ -244,6 +245,8 @@ export function openDatabase(path: string, opts: { starterMenu?: StarterMenuName
         "INSERT OR IGNORE INTO counters (name, value) VALUES ('bill_number', 1000), ('kot_number', 0)",
       ).run();
       seedStarterData(db, opts.starterMenu ?? "kasuri");
+      // The restaurant's staff (not for test databases, which use the demo menu).
+      if ((opts.starterMenu ?? "kasuri") === "kasuri") seedStarterStaff(db);
     })();
   } else {
     replaceUntouchedDemoMenu(db);
@@ -338,6 +341,22 @@ export function seedStarterData(db: Database, which: StarterMenuName = "kasuri")
   }
 
   return { tables, menuItems };
+}
+
+/** Adds Kasuri's staff. Only called when a new database is created. */
+function seedStarterStaff(db: Database) {
+  for (const e of KASURI_STAFF) {
+    db.query(
+      `INSERT INTO employees (name, role, monthly_salary, allowed_leaves, overtime_rate, join_date, active)
+       VALUES ($name, $role, $salary, $leaves, 0, $join, 1)`,
+    ).run({
+      name: e.name,
+      role: e.role,
+      salary: e.monthly_salary,
+      leaves: STARTER_ALLOWED_LEAVES,
+      join: e.join_date,
+    });
+  }
 }
 
 /**

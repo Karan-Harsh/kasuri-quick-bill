@@ -21,6 +21,32 @@ describe("starting menu", () => {
     expect(byName.has("Cold Drink")).toBe(false); // sold at M.R.P.
   });
 
+  test("a new database also starts with Kasuri's 7 staff, paid from their joining date", () => {
+    const store = new Store(openDatabase(":memory:"));
+    const staff = store.staff.employees();
+    expect(staff.map((e) => e.name).sort()).toEqual([
+      "Bidhan",
+      "Bijoy",
+      "Bishnu",
+      "Chiranjeet",
+      "Dipankar",
+      "Ranjeet",
+      "Rupchand",
+    ]);
+    expect(staff.find((e) => e.name === "Ranjeet")).toMatchObject({
+      role: "Cleaner",
+      join_date: "2026-09-30",
+      monthly_salary: 8000,
+    });
+    // Ranjeet's November period: 30 Oct – 29 Nov.
+    const ranjeet = store.staff.payroll("2026-11").find((p) => p.line.name === "Ranjeet")!;
+    expect(ranjeet.line).toMatchObject({ period_start: "2026-10-30", period_end: "2026-11-29" });
+    // Test databases (demo menu) start with no staff.
+    expect(new Store(openDatabase(":memory:", { starterMenu: "demo" })).staff.employees()).toEqual(
+      [],
+    );
+  });
+
   test("an untouched demo menu is replaced; past bills keep their dish names", () => {
     const db = openDatabase(":memory:", { starterMenu: "demo" });
     const store = new Store(db);
