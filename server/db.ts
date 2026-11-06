@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { DEMO_MENU, DEMO_TAX, flattenMenu, KASURI_MENU } from "./starter-menu";
-import { seedStarterInventory } from "./starter-inventory";
+import { OLD_STARTER_STOCK_NAMES, seedStarterInventory } from "./starter-inventory";
 import { KASURI_STAFF, STARTER_ALLOWED_LEAVES } from "./starter-staff";
 
 // Database schema. Ids are text UUIDs (used in screen URLs such as /order/$orderId).
@@ -252,6 +252,7 @@ export function openDatabase(path: string, opts: { starterMenu?: StarterMenuName
         seedStarterInventory(db);
         markDone(db, STAFF_DONE);
         markDone(db, STOCK_DONE);
+        markDone(db, STOCK_V2_DONE);
       }
     })();
   } else {
@@ -366,6 +367,8 @@ export function seedStarterData(db: Database, which: StarterMenuName = "kasuri")
 
 const STAFF_DONE = "starter_staff_added";
 const STOCK_DONE = "starter_stock_added";
+/** The starting stock was rebuilt from the restaurant's real shopping list. */
+const STOCK_V2_DONE = "starter_stock_v2";
 const isDone = (db: Database, key: string) =>
   Boolean(db.query("SELECT 1 FROM app_settings WHERE key = $k").get({ k: key }));
 const markDone = (db: Database, key: string) =>
@@ -386,6 +389,22 @@ export function fillMissingStarterData(db: Database) {
     if (!isDone(db, STOCK_DONE)) {
       if (!db.query("SELECT 1 FROM inventory_items LIMIT 1").get()) seedStarterInventory(db);
       markDone(db, STOCK_DONE);
+      markDone(db, STOCK_V2_DONE);
+    }
+    // The first, guessed starting list (39 items) is replaced by the one from the restaurant's
+    // shopping list, but only if it is still exactly as added: same items and no stock ever entered.
+    if (!isDone(db, STOCK_V2_DONE)) {
+      const names = db.query<{ name: string }, []>("SELECT name FROM inventory_items").all();
+      const untouched =
+        names.length === OLD_STARTER_STOCK_NAMES.length &&
+        names.every((n) => OLD_STARTER_STOCK_NAMES.includes(n.name)) &&
+        !db.query("SELECT 1 FROM inventory_movements LIMIT 1").get();
+      if (untouched) {
+        db.exec("DELETE FROM menu_item_ingredients");
+        db.exec("DELETE FROM inventory_items");
+        seedStarterInventory(db);
+      }
+      markDone(db, STOCK_V2_DONE);
     }
   })();
 }

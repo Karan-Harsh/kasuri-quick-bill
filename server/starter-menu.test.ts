@@ -5,6 +5,7 @@ import {
   openDatabase,
   replaceUntouchedDemoMenu,
 } from "./db";
+import { OLD_STARTER_STOCK_NAMES } from "./starter-inventory";
 import { Store } from "./store";
 
 const dishes = (store: Store) =>
@@ -38,15 +39,16 @@ describe("starting menu", () => {
   test("…and with starting stock items (with prices) and a recipe for every dish", () => {
     const store = new Store(openDatabase(":memory:"));
     const stock = store.inventoryItems();
-    expect(stock).toHaveLength(39);
+    expect(stock).toHaveLength(64);
     expect(stock.every((i) => Number(i.current_quantity) === 0 && i.price_per_unit != null)).toBe(
       true,
     );
     expect(stock.find((i) => i.name === "Onion")).toMatchObject({
       unit: "kg",
       price_per_unit: 35,
-      low_stock_level: 5,
+      low_stock_level: 10,
     });
+    expect(stock.find((i) => i.name === "Phool gobi (cauliflower)")).toMatchObject({ unit: "pcs" });
     // Not counted yet, so nothing shows as running low on a fresh install.
     expect(stock.every((i) => i.tracked === false)).toBe(true);
     const withRecipe = new Set(
@@ -93,13 +95,41 @@ describe("starting menu", () => {
 
     fillMissingStarterData(db);
     expect(store.staff.employees()).toHaveLength(7);
-    expect(store.inventoryItems()).toHaveLength(39);
+    expect(store.inventoryItems()).toHaveLength(64);
     expect((store.menuIngredients() as unknown[]).length).toBeGreaterThan(900);
 
     // Deleting everyone later doesn't bring them back.
     for (const e of store.staff.employees()) store.staff.deleteEmployee(e.id);
     fillMissingStarterData(db);
     expect(store.staff.employees()).toHaveLength(0);
+  });
+
+  test("the first guessed stock list is swapped for the real one only if never used", () => {
+    const fresh = () => {
+      const db = openDatabase(":memory:", { starterMenu: "demo" });
+      replaceUntouchedDemoMenu(db);
+      db.exec("DELETE FROM menu_item_ingredients; DELETE FROM inventory_items");
+      // The first starting list, as an older copy had it.
+      for (const name of OLD_STARTER_STOCK_NAMES)
+        db.query(
+          "INSERT INTO inventory_items (id, name, unit, current_quantity, is_active, created_at, updated_at) VALUES ($id, $n, 'kg', 0, 1, 'x', 'x')",
+        ).run({ id: crypto.randomUUID(), n: name });
+      db.exec("INSERT INTO app_settings (key, value) VALUES ('starter_stock_added', 'true')");
+      return db;
+    };
+    const unused = fresh();
+    fillMissingStarterData(unused);
+    const names = new Store(unused).inventoryItems().map((i) => i.name);
+    expect(names).toHaveLength(64);
+    expect(names).toContain("Rice (Nawazish)");
+    expect(names).not.toContain("Basmati rice");
+
+    // Stock was entered: keep what the restaurant has.
+    const used = fresh();
+    const store = new Store(used);
+    store.recordMovement(String(store.inventoryItems()[0]!.id), "received", 1);
+    fillMissingStarterData(used);
+    expect(store.inventoryItems()).toHaveLength(39);
   });
 
   test("a copy that already has staff or stock is left alone", () => {
