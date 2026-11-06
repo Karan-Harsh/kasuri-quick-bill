@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChefHat, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChefHat, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
@@ -58,6 +58,8 @@ function OrderScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  /** Finds dishes by name across every category (the menu has ~250 dishes). */
+  const [search, setSearch] = useState("");
   const [discountText, setDiscountText] = useState("0");
   const [method, setMethod] = useState<PaymentMethod>("CASH");
 
@@ -202,7 +204,14 @@ function OrderScreen() {
   const isSettled = order.status !== "OPEN";
   const tableLabel = order.restaurant_tables?.label;
   const unsentCount = items.filter((line) => !line.kitchen_sent_at).length;
-  const visibleItems = menuQuery.data?.filter((item) => item.category_id === activeCategory) ?? [];
+  // Every word typed must appear in the name: "pan chil half" finds "Paneer Chilli (Half)".
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const visibleItems =
+    menuQuery.data?.filter((item) =>
+      words.length
+        ? words.every((w) => item.name.toLowerCase().includes(w))
+        : item.category_id === activeCategory,
+    ) ?? [];
   const billGstEnabled = isSettled ? Number(order.tax_amount) > 0 : gstEnabled;
   const displayTotals = isSettled
     ? {
@@ -230,13 +239,38 @@ function OrderScreen() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a dish, e.g. paneer chilli half"
+              aria-label="Find a dish"
+              className="h-12 pl-10 pr-10 text-base"
+            />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+              >
+                <X className="size-5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
             {categories.map((category) => (
               <Button
                 key={category.id}
-                variant={activeCategory === category.id ? "default" : "outline"}
-                className="h-11 text-base"
-                onClick={() => setActiveCategory(category.id)}
+                size="sm"
+                variant={!words.length && activeCategory === category.id ? "default" : "outline"}
+                className="h-9"
+                onClick={() => {
+                  setSearch("");
+                  setActiveCategory(category.id);
+                }}
               >
                 {category.name}
               </Button>
@@ -267,7 +301,11 @@ function OrderScreen() {
               </button>
             ))}
             {visibleItems.length === 0 && (
-              <p className="text-muted-foreground">No active items in this category.</p>
+              <p className="text-muted-foreground">
+                {words.length
+                  ? `No dish matches "${search}".`
+                  : "No active items in this category."}
+              </p>
             )}
           </div>
         </section>

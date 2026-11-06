@@ -9,7 +9,7 @@ const tableId = (label: string) =>
   (store.tables() as { id: string; label: string }[]).find((t) => t.label === label)!.id;
 
 beforeEach(() => {
-  store = new Store(openDatabase(":memory:"));
+  store = new Store(openDatabase(":memory:", { starterMenu: "demo" }));
 });
 
 describe("first run", () => {

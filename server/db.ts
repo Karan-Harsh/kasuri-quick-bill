@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { DEMO_MENU, DEMO_TAX, flattenMenu, KASURI_MENU } from "./starter-menu";
 
 // Database schema. Ids are text UUIDs (used in screen URLs such as /order/$orderId).
 const SCHEMA = `
@@ -215,39 +216,15 @@ export const STARTER_TABLES = Array.from({ length: 8 }, (_, i) => ({
   label: `T${i + 1}`,
 }));
 
-export const STARTER_CATEGORIES = [
-  { name: "Starters", sort_order: 1 },
-  { name: "Main Course", sort_order: 2 },
-  { name: "Breads", sort_order: 3 },
-  { name: "Beverages", sort_order: 4 },
-];
-
-export const STARTER_MENU = [
-  { category: "Starters", name: "Paneer Tikka", price: 220, tax_rate: 5 },
-  { category: "Starters", name: "Chicken 65", price: 260, tax_rate: 5 },
-  { category: "Starters", name: "Veg Manchurian", price: 180, tax_rate: 5 },
-  { category: "Starters", name: "Masala Papad", price: 60, tax_rate: 5 },
-  { category: "Starters", name: "Spring Roll", price: 150, tax_rate: 5 },
-  { category: "Main Course", name: "Paneer Butter Masala", price: 260, tax_rate: 5 },
-  { category: "Main Course", name: "Dal Tadka", price: 180, tax_rate: 5 },
-  { category: "Main Course", name: "Chicken Curry", price: 290, tax_rate: 5 },
-  { category: "Main Course", name: "Mixed Veg Kadai", price: 220, tax_rate: 5 },
-  { category: "Main Course", name: "Palak Paneer", price: 240, tax_rate: 5 },
-  { category: "Breads", name: "Tandoori Roti", price: 20, tax_rate: 5 },
-  { category: "Breads", name: "Butter Naan", price: 45, tax_rate: 5 },
-  { category: "Breads", name: "Garlic Naan", price: 60, tax_rate: 5 },
-  { category: "Breads", name: "Laccha Paratha", price: 55, tax_rate: 5 },
-  { category: "Beverages", name: "Masala Chai", price: 30, tax_rate: 5 },
-  { category: "Beverages", name: "Fresh Lime Soda", price: 70, tax_rate: 18 },
-  { category: "Beverages", name: "Cold Coffee", price: 120, tax_rate: 18 },
-  { category: "Beverages", name: "Mango Lassi", price: 90, tax_rate: 5 },
-];
+export type StarterMenuName = "kasuri" | "demo";
+const STARTER_MENUS = { kasuri: KASURI_MENU, demo: DEMO_MENU };
 
 export const now = () => new Date().toISOString();
 export const uuid = () => crypto.randomUUID();
 
-/** Opens (and if new, creates and seeds) the database. Pass ":memory:" for tests. */
-export function openDatabase(path: string): Database {
+/** Opens (and if new, creates and seeds) the database. Pass ":memory:" for tests.
+ *  `starterMenu` picks the menu a new database starts with (tests use the small demo menu). */
+export function openDatabase(path: string, opts: { starterMenu?: StarterMenuName } = {}): Database {
   const db = new Database(path, { create: true, strict: true });
   db.exec("PRAGMA foreign_keys = ON;");
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
@@ -266,8 +243,10 @@ export function openDatabase(path: string): Database {
       db.query(
         "INSERT OR IGNORE INTO counters (name, value) VALUES ('bill_number', 1000), ('kot_number', 0)",
       ).run();
-      seedStarterData(db);
+      seedStarterData(db, opts.starterMenu ?? "kasuri");
     })();
+  } else {
+    replaceUntouchedDemoMenu(db);
   }
   return db;
 }
@@ -303,7 +282,7 @@ function migrate(db: Database) {
 }
 
 /** Adds the 8 tables and the starter menu, skipping anything that already exists. */
-export function seedStarterData(db: Database) {
+export function seedStarterData(db: Database, which: StarterMenuName = "kasuri") {
   const at = now();
   let tables = 0;
   let menuItems = 0;
@@ -317,23 +296,29 @@ export function seedStarterData(db: Database) {
     tables += r.changes;
   }
 
+  // New categories go after any that already exist, in the menu's order.
+  let nextSort = db
+    .query<{ n: number }, []>("SELECT COALESCE(MAX(sort_order), 0) AS n FROM categories")
+    .get()!.n;
   const categoryId = new Map<string, string>();
-  for (const c of STARTER_CATEGORIES) {
+  for (const { category } of STARTER_MENUS[which]) {
+    const existing = db
+      .query<{ id: string }, { name: string }>(
+        "SELECT id FROM categories WHERE lower(name) = lower($name)",
+      )
+      .get({ name: category });
+    if (existing) {
+      categoryId.set(category, existing.id);
+      continue;
+    }
+    const id = uuid();
     db.query(
-      "INSERT OR IGNORE INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $sort, $at)",
-    ).run({
-      id: uuid(),
-      name: c.name,
-      sort: c.sort_order,
-      at,
-    });
-    const row = db
-      .query<{ id: string }, { name: string }>("SELECT id FROM categories WHERE name = $name")
-      .get({ name: c.name });
-    if (row) categoryId.set(c.name, row.id);
+      "INSERT INTO categories (id, name, sort_order, created_at) VALUES ($id, $name, $sort, $at)",
+    ).run({ id, name: category, sort: ++nextSort, at });
+    categoryId.set(category, id);
   }
 
-  for (const m of STARTER_MENU) {
+  for (const m of flattenMenu(STARTER_MENUS[which])) {
     const exists = db
       .query("SELECT 1 FROM menu_items WHERE lower(name) = lower($name)")
       .get({ name: m.name });
@@ -346,13 +331,57 @@ export function seedStarterData(db: Database) {
       cat: categoryId.get(m.category)!,
       name: m.name,
       price: m.price,
-      tax: m.tax_rate,
+      tax: which === "demo" ? (DEMO_TAX[m.name] ?? 5) : 5,
       at,
     });
     menuItems++;
   }
 
   return { tables, menuItems };
+}
+
+/**
+ * Earlier versions started with a small demo menu. If a database still has exactly that menu,
+ * untouched (same dishes, prices and categories, nothing added, no recipes), it is replaced by the
+ * restaurant's real menu. Past bills keep their own copy of dish names and prices, so they are
+ * unaffected. Anything that has been changed is left alone.
+ */
+export function replaceUntouchedDemoMenu(db: Database): boolean {
+  const demo = flattenMenu(DEMO_MENU);
+  const items = db
+    .query<
+      { name: string; price: number; tax_rate: number; is_active: number; category: string },
+      []
+    >(
+      `SELECT m.name, m.price, m.tax_rate, m.is_active, c.name AS category
+       FROM menu_items m JOIN categories c ON c.id = m.category_id`,
+    )
+    .all();
+  const categories = db.query<{ name: string }, []>("SELECT name FROM categories").all();
+  const recipes = db
+    .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM menu_item_ingredients")
+    .get()!;
+  const untouched =
+    items.length === demo.length &&
+    categories.length === DEMO_MENU.length &&
+    recipes.n === 0 &&
+    demo.every((d) =>
+      items.some(
+        (i) =>
+          i.name === d.name &&
+          i.category === d.category &&
+          i.price === d.price &&
+          i.tax_rate === (DEMO_TAX[d.name] ?? 5) &&
+          i.is_active === 1,
+      ),
+    );
+  if (!untouched) return false;
+  db.transaction(() => {
+    db.exec("DELETE FROM menu_items");
+    db.exec("DELETE FROM categories");
+    seedStarterData(db, "kasuri");
+  })();
+  return true;
 }
 
 /** Next value of a counter (bill and KOT numbers). Numbers are never reused, even if a bill is discarded. */

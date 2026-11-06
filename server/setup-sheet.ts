@@ -25,7 +25,8 @@ export interface ImportResult {
   problems: ImportProblem[];
   inventory: { added: number; updated: number; unchanged: number };
   menu: { added: number; updated: number; unchanged: number; categoriesAdded: number };
-  recipes: { dishes: number; lines: number };
+  /** `waiting`: dishes listed with no ingredients filled in yet (skipped). */
+  recipes: { dishes: number; lines: number; waiting: number };
 }
 
 const SHEETS = {
@@ -100,14 +101,21 @@ const HOW_TO = [
   ["  Example:  Main Course | Veg Biryani | 220 | 5 | Yes"],
   [""],
   ["Recipes sheet — what one portion of a dish uses"],
-  ["• One row per ingredient. A dish with 3 ingredients has 3 rows."],
+  [
+    "• One row per ingredient. A dish with 3 ingredients has 3 rows (copy the dish name onto each).",
+  ],
+  [
+    "• Every dish is listed. A dish with no ingredients yet has one row with only its name: fill in the stock item, quantity and unit when you know them. Rows with only a dish name are skipped, so you can fill them in a few at a time.",
+  ],
   [
     "• The dish must be on the Menu sheet (or already in Kasuri), and the stock item on the Inventory sheet (or already in Kasuri).",
   ],
   [
     "• Unit can be smaller than the stock's unit: g for stock kept in kg, ml for L, pcs for dozen. Empty = the stock's own unit.",
   ],
-  ["• A dish listed here gets exactly these ingredients. Dishes not listed keep their recipe."],
+  [
+    "• A dish with ingredients filled in here gets exactly those ingredients. Dishes not listed, or with only their name, keep their recipe.",
+  ],
   ["  Example:  Veg Biryani | Rice | 150 | g"],
   ["            Veg Biryani | Onion | 50 | g"],
 ] satisfies Cell[][];
@@ -191,12 +199,13 @@ export function buildSetupWorkbook(store: Store): Sheet[] {
       widths: [32, 28, 22, 10],
       rows: [
         titles(COLUMNS.recipes),
-        ...recipes.map((r) => [
-          dishName.get(r.menu_item_id) ?? "",
-          r.inventory_name,
-          r.quantity,
-          r.unit,
-        ]),
+        // Every dish in menu order: its ingredients, or one row with just the name to fill in later.
+        ...dishes.flatMap((d): Cell[][] => {
+          const lines = recipes.filter((r) => r.menu_item_id === d.id);
+          return lines.length
+            ? lines.map((r) => [d.name, r.inventory_name, r.quantity, r.unit])
+            : [[d.name, null, null, null]];
+        }),
       ],
     },
   ];
@@ -308,7 +317,7 @@ function runImport(
     problems,
     inventory: { added: 0, updated: 0, unchanged: 0 },
     menu: { added: 0, updated: 0, unchanged: 0, categoriesAdded: 0 },
-    recipes: { dishes: 0, lines: 0 },
+    recipes: { dishes: 0, lines: 0, waiting: 0 },
   };
 
   /** Runs one row's changes; on error the row's changes are undone and the problem noted. */
@@ -474,12 +483,19 @@ function runImport(
       name: string;
       unit: string;
     }[];
+    const waiting = new Set<string>();
     for (const r of t?.rows ?? []) {
+      const blank = (k: "stock" | "qty" | "unit") => str(r.get(k)) === "";
+      // Only a dish name: ingredients not known yet. Skipped, not an error.
+      if (str(r.get("dish")) && blank("stock") && blank("qty") && blank("unit")) {
+        waiting.add(key(str(r.get("dish"))));
+        continue;
+      }
       row(t!.name, r.row, () => {
         const dishName = str(r.get("dish"));
         const stockName = str(r.get("stock"));
         if (!dishName) fail("Dish is empty");
-        if (!stockName) fail("Stock item is empty");
+        if (!stockName) fail("Stock item is empty (or clear the quantity and unit too)");
         const dish = dishes.find((d) => key(d.name) === key(dishName));
         if (!dish) fail(`No dish called "${dishName}". Add it on the Menu sheet first.`);
         const stock = stockItems.find((s) => key(s.name) === key(stockName));
@@ -503,6 +519,9 @@ function runImport(
         byDish.set(dish!.id, entry);
       });
     }
+    // A dish counts as waiting only if none of its rows were filled in.
+    for (const d of dishes)
+      if (waiting.has(key(d.name)) && !byDish.has(d.id)) result.recipes.waiting++;
     for (const entry of byDish.values()) {
       row(t!.name, entry.firstRow, () => {
         store.saveMenuItem(entry.dishId, { ingredients: entry.lines });

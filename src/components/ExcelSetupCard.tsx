@@ -11,7 +11,8 @@ interface ImportResult {
   problems: { sheet: string; row: number; message: string }[];
   inventory: { added: number; updated: number; unchanged: number };
   menu: { added: number; updated: number; unchanged: number; categoriesAdded: number };
-  recipes: { dishes: number; lines: number };
+  /** waiting: dishes listed with no ingredients filled in yet (skipped). */
+  recipes: { dishes: number; lines: number; waiting: number };
 }
 
 /** The file's bytes as base64 (what the server's upload route expects). */
@@ -182,6 +183,13 @@ export function ExcelSetupCard() {
                 ))}
               </ul>
             </div>
+          )}
+          {check.recipes.waiting > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {plural(check.recipes.waiting, "dish", "dishes")} on the Recipes sheet{" "}
+              {check.recipes.waiting === 1 ? "has" : "have"} no ingredients filled in yet. That's
+              fine: they're skipped until you fill them in.
+            </p>
           )}
 
           <div className="flex flex-wrap gap-2">

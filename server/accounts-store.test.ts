@@ -4,7 +4,7 @@ import { Store } from "./store";
 
 let store: Store;
 beforeEach(() => {
-  store = new Store(openDatabase(":memory:"));
+  store = new Store(openDatabase(":memory:", { starterMenu: "demo" }));
 });
 const today = () => new Date().toLocaleDateString("en-CA");
 const month = () => today().slice(0, 7);

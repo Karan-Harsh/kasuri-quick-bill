@@ -13,7 +13,7 @@ let events: { event: ServerEvent; to: string }[];
 let lanToggles: boolean[];
 
 beforeEach(() => {
-  store = new Store(openDatabase(":memory:"));
+  store = new Store(openDatabase(":memory:", { starterMenu: "demo" }));
   events = [];
   lanToggles = [];
   app = createApp({

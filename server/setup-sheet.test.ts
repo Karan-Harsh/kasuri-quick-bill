@@ -7,7 +7,7 @@ import { readXlsx, writeXlsx, type Cell, type Sheet } from "./xlsx";
 
 let store: Store;
 beforeEach(() => {
-  store = new Store(openDatabase(":memory:"));
+  store = new Store(openDatabase(":memory:", { starterMenu: "demo" }));
 });
 
 const book = (sheets: Record<string, Cell[][]>) =>
@@ -95,7 +95,8 @@ describe("setup sheet", () => {
     expect(r.problems).toEqual([]);
     expect(r.inventory).toEqual({ added: 0, updated: 0, unchanged: 1 });
     expect(r.menu).toMatchObject({ added: 0, updated: 0, unchanged: 18 });
-    expect(r.recipes).toEqual({ dishes: 1, lines: 1 });
+    // Dal Tadka has a recipe; the other 17 dishes are listed with only their name.
+    expect(r.recipes).toEqual({ dishes: 1, lines: 1, waiting: 17 });
   });
 
   test("adds stock, dishes, categories and recipes in one upload", () => {
@@ -150,6 +151,33 @@ describe("setup sheet", () => {
     expect(biryani).toEqual([
       ["Onion", 50, "g"],
       ["Rice", 150, "g"],
+    ]);
+  });
+
+  test("dishes can be listed now and their ingredients filled in later", () => {
+    const sheet = writeXlsx(buildSetupWorkbook(store));
+    const recipes = readXlsx(sheet).find((x) => x.name === "Recipes")!.rows;
+    // Every dish is on the Recipes sheet, each with one row holding only its name.
+    expect(recipes).toHaveLength(1 + 18);
+    expect(recipes[1]).toEqual(["Chicken 65"]); // by category, then A–Z
+
+    store.saveInventoryItem(null, { name: "Paneer", unit: "kg" });
+    const r = importSetupWorkbook(
+      store,
+      book({
+        Recipes: [
+          ["Dish", "Stock item", "Quantity per portion", "Unit"],
+          ["Paneer Tikka", "Paneer", 200, "g"], // filled in
+          ["Paneer Tikka", null, null, null], // a spare blank row for the same dish
+          ["Chicken 65", null, null, null], // not known yet
+          ["Dal Tadka", null, 50, "g"], // half filled: an error
+        ],
+      }),
+      false,
+    );
+    expect(r.recipes).toMatchObject({ dishes: 1, lines: 1, waiting: 1 });
+    expect(r.problems).toEqual([
+      expect.objectContaining({ row: 5, message: expect.stringContaining("Stock item is empty") }),
     ]);
   });
 
