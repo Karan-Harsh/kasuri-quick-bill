@@ -95,6 +95,11 @@ function Receipt() {
         <header className="border-b border-dashed border-border pb-4 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight">Kasuri</h1>
           <p className="text-sm text-muted-foreground">Restaurant · Tax invoice</p>
+          {order.status === "CANCELLED" && (
+            <p className="mt-3 inline-block rounded border-2 border-destructive px-3 py-1 text-lg font-extrabold tracking-widest text-destructive">
+              CANCELLED
+            </p>
+          )}
         </header>
 
         <div className="grid grid-cols-2 gap-2 py-4 text-sm">

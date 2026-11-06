@@ -579,8 +579,76 @@ export class Store {
         item.current_quantity,
         `Bill #${billNumber}`,
         null,
+        orderId,
       );
     }
+  }
+
+  /** Puts back the stock a settled bill used (after cancelling or erasing it). */
+  private returnStockForOrder(orderId: string, billNumber: number, why: "cancelled" | "erased") {
+    // Bills settled before stock changes were linked to bills are found by their note.
+    const used = this.all<{ item_id: string; amount: number }>(
+      `SELECT item_id, -SUM(quantity_change) AS amount FROM inventory_movements
+       WHERE movement_type = 'used'
+         AND (order_id = $o OR (order_id IS NULL AND note = $note))
+       GROUP BY item_id`,
+      { o: orderId, note: `Bill #${billNumber}` },
+    );
+    for (const u of used) {
+      if (!(u.amount > 0)) continue;
+      const item = this.get<{ current_quantity: number }>(
+        "SELECT current_quantity FROM inventory_items WHERE id = $id",
+        { id: u.item_id },
+      );
+      if (!item) continue;
+      this.writeStock(
+        u.item_id,
+        "received",
+        round3(item.current_quantity + u.amount),
+        item.current_quantity,
+        `Bill #${billNumber} ${why}`,
+        null,
+        orderId,
+      );
+    }
+  }
+
+  private settledBillOrThrow(orderId: string) {
+    const o = this.get<{ status: string; bill_number: number }>(
+      "SELECT status, bill_number FROM orders WHERE id = $id",
+      { id: orderId },
+    );
+    if (!o) throw new AppError("Bill not found", 404);
+    if (o.status === "OPEN")
+      throw new AppError("This bill is still open. Discard it from its table instead.");
+    return o;
+  }
+
+  /** Cancels a settled bill: it stays on record (marked cancelled) but no longer counts as a sale,
+   *  and the stock its dishes used is put back. */
+  cancelBill(orderId: string, reason?: string | null) {
+    return this.tx(() => {
+      const o = this.settledBillOrThrow(orderId);
+      if (o.status === "CANCELLED")
+        throw new AppError(`Bill #${o.bill_number} is already cancelled`);
+      this.run(
+        "UPDATE orders SET status = 'CANCELLED', cancelled_at = $at, cancel_reason = $why WHERE id = $id",
+        { at: now(), why: (reason ?? "").trim().slice(0, 200) || null, id: orderId },
+      );
+      this.returnStockForOrder(orderId, o.bill_number, "cancelled");
+      return { bill_number: o.bill_number };
+    });
+  }
+
+  /** Erases a settled or cancelled bill for good. Its number is not reused. */
+  eraseBill(orderId: string) {
+    return this.tx(() => {
+      const o = this.settledBillOrThrow(orderId);
+      // A cancelled bill already gave its stock back.
+      if (o.status === "COMPLETED") this.returnStockForOrder(orderId, o.bill_number, "erased");
+      this.run("DELETE FROM orders WHERE id = $id", { id: orderId });
+      return { bill_number: o.bill_number };
+    });
   }
 
   discardOrder(orderId: string) {
@@ -786,10 +854,12 @@ export class Store {
   report(fromIso: string, toIso: string) {
     const orders = this.all<Row & { id: string }>(
       `SELECT o.id, o.bill_number, o.order_type, o.payment_method, o.subtotal, o.discount, o.tax_amount,
-              o.total, o.created_at, o.completed_at, t.label AS table_label,
+              o.total, o.created_at, o.completed_at, o.status, o.cancelled_at, o.cancel_reason,
+              t.label AS table_label,
               (SELECT COALESCE(SUM(i.quantity), 0) FROM order_items i WHERE i.order_id = o.id) AS item_count
        FROM orders o LEFT JOIN restaurant_tables t ON t.id = o.table_id
-       WHERE o.status = 'COMPLETED' AND o.completed_at >= $from AND o.completed_at <= $to
+       -- Cancelled bills are listed (marked) but only completed ones count as sales.
+       WHERE o.status IN ('COMPLETED', 'CANCELLED') AND o.completed_at >= $from AND o.completed_at <= $to
        ORDER BY o.completed_at DESC`,
       { from: fromIso, to: toIso },
     );
@@ -945,6 +1015,7 @@ export class Store {
     before: number,
     note: string | null | undefined,
     createdBy: string | null,
+    orderId: string | null = null,
   ) {
     const at = now();
     this.run("UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id", {
@@ -953,8 +1024,8 @@ export class Store {
       id: itemId,
     });
     this.run(
-      `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at)
-       VALUES ($id, $item, $type, $delta, $after, $note, $by, $at)`,
+      `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at, order_id)
+       VALUES ($id, $item, $type, $delta, $after, $note, $by, $at, $order)`,
       {
         id: uuid(),
         item: itemId,
@@ -964,6 +1035,7 @@ export class Store {
         note: note?.trim() || null,
         by: createdBy,
         at,
+        order: orderId,
       },
     );
   }

@@ -228,6 +228,20 @@ export function createApp(opts: AppOptions) {
     "counter",
     change(["orders", "kitchen"], ({ params }) => store.discardOrder(params.id!)),
   );
+  route(
+    "POST",
+    "/api/orders/:id/cancel",
+    "counter",
+    change(["orders", "inventory"], ({ params, body }) =>
+      store.cancelBill(params.id!, typeof body?.reason === "string" ? body.reason : null),
+    ),
+  );
+  route(
+    "POST",
+    "/api/orders/:id/erase",
+    "counter",
+    change(["orders", "inventory"], ({ params }) => store.eraseBill(params.id!)),
+  );
   route("GET", "/api/stats/today", "counter", ({ query }) =>
     store.todayStats(query.get("from") ?? new Date(0).toISOString()),
   );

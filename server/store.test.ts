@@ -269,6 +269,73 @@ describe("recipes and low stock", () => {
   });
 });
 
+describe("cancelling and erasing bills", () => {
+  const stockOf = (id: string) =>
+    (store.inventoryItems() as { id: string; current_quantity: number }[]).find((i) => i.id === id)!
+      .current_quantity;
+  const range = ["2000-01-01T00:00:00.000Z", "2999-01-01T00:00:00.000Z"] as const;
+
+  function settledBillUsingPaneer() {
+    const paneer = store.saveInventoryItem(null, {
+      name: "Paneer",
+      unit: "kg",
+      opening_quantity: 2,
+    });
+    const tikka = menuItem("Paneer Tikka");
+    store.saveMenuItem(tikka.id, {
+      ingredients: [{ inventory_item_id: paneer.id, quantity: 200, unit: "g" }],
+    });
+    const o = store.createOrder(null);
+    store.addItem(o.id, tikka.id);
+    store.addItem(o.id, tikka.id);
+    store.settle(o.id, { payment_method: "CASH" });
+    expect(stockOf(paneer.id)).toBe(1.6);
+    return { orderId: o.id, paneerId: paneer.id };
+  }
+
+  test("a cancelled bill stays listed but stops counting as a sale, and its stock comes back", () => {
+    const { orderId, paneerId } = settledBillUsingPaneer();
+    store.cancelBill(orderId, "  Customer complaint  ");
+    expect(stockOf(paneerId)).toBe(2);
+    expect(store.order(orderId)).toMatchObject({
+      status: "CANCELLED",
+      cancel_reason: "Customer complaint",
+    });
+    const r = store.report(...range);
+    expect(r.orders).toEqual([expect.objectContaining({ id: orderId, status: "CANCELLED" })]);
+    expect(r.lines).toEqual([]);
+    expect(store.todayStats(range[0])).toEqual({ sales: 0, orders: 0, parcels: 0 });
+    expect(store.inventoryMovements(1)[0]).toMatchObject({
+      movement_type: "received",
+      quantity_change: 0.4,
+      note: "Bill #1001 cancelled",
+    });
+    expect(() => store.cancelBill(orderId)).toThrow("already cancelled");
+  });
+
+  test("erasing removes the bill for good, returns stock once, and never reuses its number", () => {
+    const { orderId, paneerId } = settledBillUsingPaneer();
+    store.eraseBill(orderId);
+    expect(stockOf(paneerId)).toBe(2);
+    expect(() => store.order(orderId)).toThrow("not found");
+    expect(store.report(...range).orders).toEqual([]);
+    expect(store.order(store.createOrder(null).id).bill_number).toBe(1002);
+  });
+
+  test("erasing an already-cancelled bill doesn't return its stock twice", () => {
+    const { orderId, paneerId } = settledBillUsingPaneer();
+    store.cancelBill(orderId);
+    store.eraseBill(orderId);
+    expect(stockOf(paneerId)).toBe(2);
+  });
+
+  test("open bills can't be cancelled or erased here", () => {
+    const o = store.createOrder(null);
+    expect(() => store.cancelBill(o.id)).toThrow("still open");
+    expect(() => store.eraseBill(o.id)).toThrow("still open");
+  });
+});
+
 describe("reports", () => {
   test("only completed orders in range are included", () => {
     const a = store.createOrder(null);

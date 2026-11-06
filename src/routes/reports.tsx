@@ -61,6 +61,7 @@ function Reports() {
           bill_number: number;
           table_label: string | null;
           item_count: number;
+          status: "COMPLETED" | "CANCELLED";
           created_at: string;
           order_type: string;
           payment_method: string | null;
@@ -74,7 +75,10 @@ function Reports() {
       }>(`/reports?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`),
   });
 
-  const orders = reportQuery.data?.orders ?? [];
+  // Every bill in the period, cancelled ones included (shown, but never counted).
+  const bills = reportQuery.data?.orders ?? [];
+  const orders = bills.filter((bill) => bill.status === "COMPLETED");
+  const cancelledCount = bills.length - orders.length;
   const lines = reportQuery.data?.lines ?? [];
 
   const totalSales = orders.reduce((sum, order) => sum + Number(order.total), 0);
@@ -84,7 +88,7 @@ function Reports() {
   const parcel = orders.filter((order) => order.order_type === "PARCEL");
 
   const search = billSearch.trim().replace(/^#/, "");
-  const shownBills = search ? orders.filter((o) => String(o.bill_number).includes(search)) : orders;
+  const shownBills = search ? bills.filter((o) => String(o.bill_number).includes(search)) : bills;
   const multiDay = range.from !== range.to;
   const billTime = (iso: string | null) =>
     iso
@@ -200,6 +204,11 @@ function Reports() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold">
               Bills <span className="text-muted-foreground">({orders.length})</span>
+              {cancelledCount > 0 && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  + {cancelledCount} cancelled (not counted)
+                </span>
+              )}
             </h2>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -226,33 +235,47 @@ function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {shownBills.map((bill) => (
-                  <tr
-                    key={bill.id}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Open bill #${bill.bill_number}`}
-                    className="cursor-pointer border-b border-border/60 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                    onClick={() => setOpenBill(bill.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setOpenBill(bill.id);
-                      }
-                    }}
-                  >
-                    <td className="py-3 font-semibold">#{bill.bill_number}</td>
-                    <td className="py-3 whitespace-nowrap">{billTime(bill.completed_at)}</td>
-                    <td className="py-3">
-                      {bill.order_type === "PARCEL"
-                        ? orderTypeLabel(bill.order_type)
-                        : `Table ${bill.table_label ?? "—"}`}
-                    </td>
-                    <td className="py-3 text-right">{bill.item_count}</td>
-                    <td className="py-3 pl-8">{paymentLabel(bill.payment_method)}</td>
-                    <td className="py-3 text-right font-semibold">{inr(Number(bill.total))}</td>
-                  </tr>
-                ))}
+                {shownBills.map((bill) => {
+                  const cancelled = bill.status === "CANCELLED";
+                  return (
+                    <tr
+                      key={bill.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open bill #${bill.bill_number}`}
+                      className={`cursor-pointer border-b border-border/60 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${cancelled ? "text-muted-foreground" : ""}`}
+                      onClick={() => setOpenBill(bill.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenBill(bill.id);
+                        }
+                      }}
+                    >
+                      <td className="py-3 font-semibold">
+                        #{bill.bill_number}
+                        {cancelled && (
+                          <span className="ml-2 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                            Cancelled
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 whitespace-nowrap">{billTime(bill.completed_at)}</td>
+                      <td className="py-3">
+                        {bill.order_type === "PARCEL"
+                          ? orderTypeLabel(bill.order_type)
+                          : `Table ${bill.table_label ?? "—"}`}
+                      </td>
+                      <td className="py-3 text-right">{bill.item_count}</td>
+                      <td className="py-3 pl-8">{paymentLabel(bill.payment_method)}</td>
+                      <td
+                        className={`py-3 text-right font-semibold ${cancelled ? "line-through" : ""}`}
+                      >
+                        {inr(Number(bill.total))}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!reportQuery.isLoading && shownBills.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-4 text-muted-foreground">

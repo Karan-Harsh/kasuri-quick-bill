@@ -222,6 +222,19 @@ function migrate(db: Database) {
     db.exec(
       "ALTER TABLE inventory_items ADD COLUMN low_stock_level REAL CHECK (low_stock_level >= 0)",
     );
+  // Cancelled bills keep their record: when and why they were cancelled.
+  if (!hasColumn(db, "orders", "cancelled_at"))
+    db.exec("ALTER TABLE orders ADD COLUMN cancelled_at TEXT");
+  if (!hasColumn(db, "orders", "cancel_reason"))
+    db.exec("ALTER TABLE orders ADD COLUMN cancel_reason TEXT");
+  // The bill a stock change came from (so cancelling a bill can return exactly what it used).
+  // Not a foreign key: the stock history stays even if the bill is erased.
+  if (!hasColumn(db, "inventory_movements", "order_id")) {
+    db.exec("ALTER TABLE inventory_movements ADD COLUMN order_id TEXT");
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS inventory_movements_order_idx ON inventory_movements (order_id)",
+    );
+  }
 }
 
 /** Adds the 8 tables and the starter menu, skipping anything that already exists. */
