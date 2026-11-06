@@ -889,8 +889,17 @@ export class Store {
   inventoryItems() {
     return this.all<Row>(
       `SELECT i.id, i.name, i.unit, i.current_quantity, i.low_stock_level, i.is_active, i.updated_at,
-              (SELECT COUNT(*) FROM menu_item_ingredients r WHERE r.inventory_item_id = i.id) AS dish_count
-       FROM inventory_items i ORDER BY i.name`,
+              (SELECT COUNT(*) FROM menu_item_ingredients r WHERE r.inventory_item_id = i.id) AS dish_count,
+              -- Price per unit of the latest delivery with an amount paid (prices change day to day).
+              lp.cost / lp.quantity_change AS last_price, lp.created_at AS last_price_at
+       FROM inventory_items i
+       LEFT JOIN inventory_movements lp ON lp.id = (
+         SELECT m.id FROM inventory_movements m
+         WHERE m.item_id = i.id AND m.movement_type = 'received' AND m.order_id IS NULL
+           AND m.cost IS NOT NULL AND m.quantity_change > 0
+         ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1
+       )
+       ORDER BY i.name`,
     ).map((r) => bool(r, "is_active"));
   }
 

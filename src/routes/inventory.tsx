@@ -57,6 +57,8 @@ interface MovementDialog {
   unit: string;
   currentQuantity: number;
   type: InventoryMovementType;
+  /** Price per unit last time (a hint: prices change day to day). */
+  lastPrice: number | null;
 }
 
 const emptyForm = (): ItemForm => ({
@@ -75,6 +77,23 @@ function InventoryPage() {
   const [movementNote, setMovementNote] = useState("");
   /** Amount paid for a delivery (Received only), used in profit & loss. */
   const [movementCost, setMovementCost] = useState("");
+  /** Price per unit for a delivery; the total (movementCost) is worked out from it. */
+  const [movementRate, setMovementRate] = useState("");
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  /** Keeps price per unit × quantity = total paid, whichever one is typed. */
+  const fromRate = (rate: string, qty: string) => {
+    setMovementRate(rate);
+    const r = Number(rate);
+    const q = Number(qty);
+    if (rate.trim() !== "" && r >= 0 && q > 0) setMovementCost(String(round2(r * q)));
+    else if (rate.trim() === "") setMovementCost("");
+  };
+  const fromTotal = (total: string) => {
+    setMovementCost(total);
+    const t = Number(total);
+    const q = Number(movementQty);
+    setMovementRate(total.trim() !== "" && t >= 0 && q > 0 ? String(round2(t / q)) : "");
+  };
 
   const itemsQuery = useInventoryItems();
 
@@ -147,6 +166,7 @@ function InventoryPage() {
       setMovementQty("");
       setMovementNote("");
       setMovementCost("");
+      setMovementRate("");
       toast.success("Stock updated");
     },
     onError: (error) =>
@@ -241,6 +261,15 @@ function InventoryPage() {
                     <p className="text-xs text-muted-foreground">
                       Updated {new Date(item.updated_at).toLocaleString("en-IN")}
                     </p>
+                    {item.last_price != null && item.last_price_at && (
+                      <p className="text-xs text-muted-foreground">
+                        Last bought at {inr(Number(item.last_price))}/{item.unit} on{" "}
+                        {new Date(item.last_price_at).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </p>
+                    )}
                   </div>
                   <Button
                     size="icon"
@@ -274,12 +303,14 @@ function InventoryPage() {
                           unit: item.unit,
                           currentQuantity: Number(item.current_quantity),
                           type,
+                          lastPrice: item.last_price == null ? null : Number(item.last_price),
                         });
                         setMovementQty(
                           type === "count" ? String(Number(item.current_quantity)) : "",
                         );
                         setMovementNote("");
                         setMovementCost("");
+                        setMovementRate("");
                       }}
                     >
                       {movementLabel(type)}
@@ -364,6 +395,11 @@ function InventoryPage() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {row.cost != null ? inr(Number(row.cost)) : "—"}
+                        {row.cost != null && Number(row.quantity_change) > 0 && (
+                          <span className="block text-xs text-muted-foreground">
+                            {inr(Number(row.cost) / Number(row.quantity_change))}/{unit}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{row.note ?? "—"}</td>
                     </tr>
@@ -492,26 +528,53 @@ function InventoryPage() {
                   min={0}
                   step="any"
                   value={movementQty}
-                  onChange={(e) => setMovementQty(e.target.value)}
+                  onChange={(e) => {
+                    setMovementQty(e.target.value);
+                    if (movement.type === "received" && movementRate.trim() !== "")
+                      fromRate(movementRate, e.target.value);
+                  }}
                   className="h-11"
                 />
               </div>
               {movement.type === "received" && (
                 <div className="space-y-2">
-                  <Label htmlFor="moveCost">Amount paid (₹, optional)</Label>
-                  <Input
-                    id="moveCost"
-                    type="number"
-                    min={0}
-                    step="any"
-                    inputMode="decimal"
-                    value={movementCost}
-                    onChange={(e) => setMovementCost(e.target.value)}
-                    placeholder="e.g. 1500"
-                    className="h-11"
-                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="moveRate">Price per {movement.unit} (₹)</Label>
+                      <Input
+                        id="moveRate"
+                        type="number"
+                        min={0}
+                        step="any"
+                        inputMode="decimal"
+                        value={movementRate}
+                        onChange={(e) => fromRate(e.target.value, movementQty)}
+                        placeholder={
+                          movement.lastPrice != null
+                            ? `last ${round2(movement.lastPrice)}`
+                            : "e.g. 42.75"
+                        }
+                        className="h-11"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="moveCost">Total paid (₹)</Label>
+                      <Input
+                        id="moveCost"
+                        type="number"
+                        min={0}
+                        step="any"
+                        inputMode="decimal"
+                        value={movementCost}
+                        onChange={(e) => fromTotal(e.target.value)}
+                        placeholder="e.g. 1500"
+                        className="h-11"
+                      />
+                    </div>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Counted as ingredient cost in Accounts → profit and loss.
+                    Optional. Type today's price per {movement.unit} or the total bill; the other is
+                    worked out. Counted as ingredient cost in Accounts → profit and loss.
                   </p>
                 </div>
               )}

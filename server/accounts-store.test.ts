@@ -25,6 +25,18 @@ describe("expenses", () => {
     expect(store.accounts.expenses(today(), today())).toHaveLength(1);
   });
 
+  test("each stock item shows the price per unit of its latest priced delivery", () => {
+    const { id } = store.saveInventoryItem(null, { name: "Onion", unit: "kg" });
+    store.recordMovement(id, "received", 10, null, null, 427.5); // ₹42.75/kg
+    store.recordMovement(id, "received", 4, null, null, 150); // ₹37.50/kg, the next day
+    store.recordMovement(id, "received", 2); // no price entered: doesn't replace the last price
+    const onion = store.inventoryItems().find((i) => i.id === id)!;
+    expect(onion.last_price).toBe(37.5);
+    expect(onion.last_price_at).toBeTruthy();
+    const salt = store.saveInventoryItem(null, { name: "Salt", unit: "kg" });
+    expect(store.inventoryItems().find((i) => i.id === salt.id)!.last_price).toBeNull();
+  });
+
   test("amount paid can only go on stock received", () => {
     const { id } = store.saveInventoryItem(null, { name: "Rice", unit: "kg" });
     store.recordMovement(id, "received", 25, null, null, 1500);
