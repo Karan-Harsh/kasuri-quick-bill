@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WaiterPhonesCard } from "@/components/WaiterPhonesCard";
 import { ExcelSetupCard } from "@/components/ExcelSetupCard";
+import { SalaryRulesCard } from "@/components/staff/SalaryRulesCard";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — Kasuri" }] }),
@@ -85,6 +86,8 @@ function SettingsPage() {
         </Card>
 
         <ExcelSetupCard />
+
+        <SalaryRulesCard />
 
         <WaiterPhonesCard />
 

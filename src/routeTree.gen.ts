@@ -16,9 +16,17 @@ import { Route as KitchenRouteImport } from './routes/kitchen'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as StaffRouteImport } from './routes/staff'
 import { Route as KotTicketIdRouteImport } from './routes/kot.$ticketId'
 import { Route as OrderOrderIdRouteImport } from './routes/order.$orderId'
 import { Route as ReceiptOrderIdRouteImport } from './routes/receipt.$orderId'
+import { Route as StaffIndexRouteImport } from './routes/staff.index'
+import { Route as StaffAdvancesRouteImport } from './routes/staff.advances'
+import { Route as StaffTimesheetRouteImport } from './routes/staff.timesheet'
+import { Route as StaffPeopleIndexRouteImport } from './routes/staff.people.index'
+import { Route as StaffPeopleIdRouteImport } from './routes/staff.people.$id'
+import { Route as StaffSalaryIndexRouteImport } from './routes/staff.salary.index'
+import { Route as StaffSalaryMonthEmployeeIdRouteImport } from './routes/staff.salary.$month.$employeeId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -55,6 +63,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KotTicketIdRoute = KotTicketIdRouteImport.update({
   id: '/kot/$ticketId',
   path: '/kot/$ticketId',
@@ -70,6 +83,42 @@ const ReceiptOrderIdRoute = ReceiptOrderIdRouteImport.update({
   path: '/receipt/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StaffIndexRoute = StaffIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffAdvancesRoute = StaffAdvancesRouteImport.update({
+  id: '/advances',
+  path: '/advances',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffTimesheetRoute = StaffTimesheetRouteImport.update({
+  id: '/timesheet',
+  path: '/timesheet',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffPeopleIndexRoute = StaffPeopleIndexRouteImport.update({
+  id: '/people/',
+  path: '/people/',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffPeopleIdRoute = StaffPeopleIdRouteImport.update({
+  id: '/people/$id',
+  path: '/people/$id',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffSalaryIndexRoute = StaffSalaryIndexRouteImport.update({
+  id: '/salary/',
+  path: '/salary/',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffSalaryMonthEmployeeIdRoute =
+  StaffSalaryMonthEmployeeIdRouteImport.update({
+    id: '/salary/$month/$employeeId',
+    path: '/salary/$month/$employeeId',
+    getParentRoute: () => StaffRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -79,9 +128,17 @@ export interface FileRoutesByFullPath {
   '/menu': typeof MenuRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/staff': typeof StaffRouteWithChildren
   '/kot/$ticketId': typeof KotTicketIdRoute
   '/order/$orderId': typeof OrderOrderIdRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
+  '/staff/advances': typeof StaffAdvancesRoute
+  '/staff/timesheet': typeof StaffTimesheetRoute
+  '/staff/': typeof StaffIndexRoute
+  '/staff/people/$id': typeof StaffPeopleIdRoute
+  '/staff/people/': typeof StaffPeopleIndexRoute
+  '/staff/salary/': typeof StaffSalaryIndexRoute
+  '/staff/salary/$month/$employeeId': typeof StaffSalaryMonthEmployeeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +151,13 @@ export interface FileRoutesByTo {
   '/kot/$ticketId': typeof KotTicketIdRoute
   '/order/$orderId': typeof OrderOrderIdRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
+  '/staff/advances': typeof StaffAdvancesRoute
+  '/staff/timesheet': typeof StaffTimesheetRoute
+  '/staff': typeof StaffIndexRoute
+  '/staff/people/$id': typeof StaffPeopleIdRoute
+  '/staff/people': typeof StaffPeopleIndexRoute
+  '/staff/salary': typeof StaffSalaryIndexRoute
+  '/staff/salary/$month/$employeeId': typeof StaffSalaryMonthEmployeeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -104,9 +168,17 @@ export interface FileRoutesById {
   '/menu': typeof MenuRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/staff': typeof StaffRouteWithChildren
   '/kot/$ticketId': typeof KotTicketIdRoute
   '/order/$orderId': typeof OrderOrderIdRoute
   '/receipt/$orderId': typeof ReceiptOrderIdRoute
+  '/staff/advances': typeof StaffAdvancesRoute
+  '/staff/timesheet': typeof StaffTimesheetRoute
+  '/staff/': typeof StaffIndexRoute
+  '/staff/people/$id': typeof StaffPeopleIdRoute
+  '/staff/people/': typeof StaffPeopleIndexRoute
+  '/staff/salary/': typeof StaffSalaryIndexRoute
+  '/staff/salary/$month/$employeeId': typeof StaffSalaryMonthEmployeeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -118,9 +190,17 @@ export interface FileRouteTypes {
     | '/menu'
     | '/reports'
     | '/settings'
+    | '/staff'
     | '/kot/$ticketId'
     | '/order/$orderId'
     | '/receipt/$orderId'
+    | '/staff/advances'
+    | '/staff/timesheet'
+    | '/staff/'
+    | '/staff/people/$id'
+    | '/staff/people/'
+    | '/staff/salary/'
+    | '/staff/salary/$month/$employeeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +213,13 @@ export interface FileRouteTypes {
     | '/kot/$ticketId'
     | '/order/$orderId'
     | '/receipt/$orderId'
+    | '/staff/advances'
+    | '/staff/timesheet'
+    | '/staff'
+    | '/staff/people/$id'
+    | '/staff/people'
+    | '/staff/salary'
+    | '/staff/salary/$month/$employeeId'
   id:
     | '__root__'
     | '/'
@@ -142,9 +229,17 @@ export interface FileRouteTypes {
     | '/menu'
     | '/reports'
     | '/settings'
+    | '/staff'
     | '/kot/$ticketId'
     | '/order/$orderId'
     | '/receipt/$orderId'
+    | '/staff/advances'
+    | '/staff/timesheet'
+    | '/staff/'
+    | '/staff/people/$id'
+    | '/staff/people/'
+    | '/staff/salary/'
+    | '/staff/salary/$month/$employeeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -155,6 +250,7 @@ export interface RootRouteChildren {
   MenuRoute: typeof MenuRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
+  StaffRoute: typeof StaffRouteWithChildren
   KotTicketIdRoute: typeof KotTicketIdRoute
   OrderOrderIdRoute: typeof OrderOrderIdRoute
   ReceiptOrderIdRoute: typeof ReceiptOrderIdRoute
@@ -211,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/kot/$ticketId': {
       id: '/kot/$ticketId'
       path: '/kot/$ticketId'
@@ -232,8 +335,79 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReceiptOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/staff/': {
+      id: '/staff/'
+      path: '/'
+      fullPath: '/staff/'
+      preLoaderRoute: typeof StaffIndexRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/advances': {
+      id: '/staff/advances'
+      path: '/advances'
+      fullPath: '/staff/advances'
+      preLoaderRoute: typeof StaffAdvancesRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/timesheet': {
+      id: '/staff/timesheet'
+      path: '/timesheet'
+      fullPath: '/staff/timesheet'
+      preLoaderRoute: typeof StaffTimesheetRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/people/': {
+      id: '/staff/people/'
+      path: '/people'
+      fullPath: '/staff/people/'
+      preLoaderRoute: typeof StaffPeopleIndexRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/people/$id': {
+      id: '/staff/people/$id'
+      path: '/people/$id'
+      fullPath: '/staff/people/$id'
+      preLoaderRoute: typeof StaffPeopleIdRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/salary/': {
+      id: '/staff/salary/'
+      path: '/salary'
+      fullPath: '/staff/salary/'
+      preLoaderRoute: typeof StaffSalaryIndexRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/staff/salary/$month/$employeeId': {
+      id: '/staff/salary/$month/$employeeId'
+      path: '/salary/$month/$employeeId'
+      fullPath: '/staff/salary/$month/$employeeId'
+      preLoaderRoute: typeof StaffSalaryMonthEmployeeIdRouteImport
+      parentRoute: typeof StaffRoute
+    }
   }
 }
+
+interface StaffRouteChildren {
+  StaffAdvancesRoute: typeof StaffAdvancesRoute
+  StaffTimesheetRoute: typeof StaffTimesheetRoute
+  StaffIndexRoute: typeof StaffIndexRoute
+  StaffPeopleIdRoute: typeof StaffPeopleIdRoute
+  StaffPeopleIndexRoute: typeof StaffPeopleIndexRoute
+  StaffSalaryIndexRoute: typeof StaffSalaryIndexRoute
+  StaffSalaryMonthEmployeeIdRoute: typeof StaffSalaryMonthEmployeeIdRoute
+}
+
+const StaffRouteChildren: StaffRouteChildren = {
+  StaffAdvancesRoute: StaffAdvancesRoute,
+  StaffTimesheetRoute: StaffTimesheetRoute,
+  StaffIndexRoute: StaffIndexRoute,
+  StaffPeopleIdRoute: StaffPeopleIdRoute,
+  StaffPeopleIndexRoute: StaffPeopleIndexRoute,
+  StaffSalaryIndexRoute: StaffSalaryIndexRoute,
+  StaffSalaryMonthEmployeeIdRoute: StaffSalaryMonthEmployeeIdRoute,
+}
+
+const StaffRouteWithChildren = StaffRoute._addFileChildren(StaffRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -243,6 +417,7 @@ const rootRouteChildren: RootRouteChildren = {
   MenuRoute: MenuRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
+  StaffRoute: StaffRouteWithChildren,
   KotTicketIdRoute: KotTicketIdRoute,
   OrderOrderIdRoute: OrderOrderIdRoute,
   ReceiptOrderIdRoute: ReceiptOrderIdRoute,

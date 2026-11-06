@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BarChart3, BookOpen, ChefHat, LayoutGrid, Package, Settings } from "lucide-react";
+import { BarChart3, BookOpen, ChefHat, LayoutGrid, Package, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLowStockItems } from "@/lib/low-stock";
 
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/kitchen", label: "Kitchen", icon: ChefHat },
   { to: "/inventory", label: "Inventory", icon: Package },
+  { to: "/staff", label: "Staff", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

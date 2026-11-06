@@ -175,6 +175,27 @@ describe("waiter phones", () => {
     expect((await call("GET", "/api/devices", opts)).status).toBe(403);
   });
 
+  test("can never see staff, salaries, or cancel and erase bills", async () => {
+    store.staff.createEmployee({ name: "Ravi", monthly_salary: 15000, join_date: "2026-01-01" });
+    const token = await pairPhone();
+    const opts = { ip: PHONE_IP, token, origin: PC };
+    for (const path of [
+      "/api/staff/employees",
+      "/api/staff/employees/1",
+      "/api/staff/payroll?month=2026-01",
+      "/api/staff/adjustments?month=2026-01",
+      "/api/staff/attendance?month=2026-01",
+    ])
+      expect((await call("GET", path, opts)).status).toBe(403);
+    const order = store.createOrder(null);
+    expect(
+      (await call("POST", `/api/orders/${order.id}/cancel`, { ...opts, body: {} })).status,
+    ).toBe(403);
+    expect(
+      (await call("POST", `/api/orders/${order.id}/erase`, { ...opts, body: {} })).status,
+    ).toBe(403);
+  });
+
   test("cannot start a parcel bill or change items already sent to the kitchen", async () => {
     const token = await pairPhone();
     const opts = { ip: PHONE_IP, token, origin: PC };

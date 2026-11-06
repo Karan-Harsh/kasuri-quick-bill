@@ -177,3 +177,11 @@
     max-width: 100% !important;
   }
 }
+
+/* Plain form fields on the Staff screens (merged from the Staff & Salary app) look like the rest of Kasuri. */
+@layer components {
+  .staff-screen
+    :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    @apply rounded-md border border-input bg-card px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20;
+  }
+}

@@ -132,6 +132,57 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS menu_item_ingredients_inventory_idx ON menu_item_ingredients (inventory_item_id);
 
+  -- ---------- Staff, attendance and salary (from the Kasuri Staff & Salary app) ----------
+  CREATE TABLE IF NOT EXISTS employees (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    phone          TEXT NOT NULL DEFAULT '',
+    role           TEXT NOT NULL DEFAULT '',
+    monthly_salary REAL NOT NULL CHECK (monthly_salary >= 0),
+    allowed_leaves REAL NOT NULL DEFAULT 0,
+    overtime_rate  REAL NOT NULL DEFAULT 0,
+    join_date      TEXT NOT NULL,
+    active         INTEGER NOT NULL DEFAULT 1,
+    notes          TEXT NOT NULL DEFAULT ''
+  );
+
+  -- One row per person per day that is NOT a plain "present" (present is the default).
+  CREATE TABLE IF NOT EXISTS attendance (
+    employee_id    INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    date           TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('P','A','H','L','O')),
+    check_in       TEXT,
+    check_out      TEXT,
+    overtime_hours REAL NOT NULL DEFAULT 0,
+    note           TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (employee_id, date)
+  );
+  CREATE INDEX IF NOT EXISTS attendance_date_idx ON attendance (date);
+
+  -- Advances, bonuses and other deductions, settled in that month's salary.
+  CREATE TABLE IF NOT EXISTS salary_adjustments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    type        TEXT NOT NULL CHECK (type IN ('advance','bonus','deduction')),
+    amount      REAL NOT NULL CHECK (amount > 0),
+    date        TEXT NOT NULL,
+    note        TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS salary_adjustments_date_idx ON salary_adjustments (date);
+
+  -- A salary marked as paid, with a snapshot of how it was calculated (later edits don't change it).
+  CREATE TABLE IF NOT EXISTS salary_payments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    month       TEXT NOT NULL,
+    amount      REAL NOT NULL,
+    paid_on     TEXT NOT NULL,
+    method      TEXT NOT NULL DEFAULT 'Cash',
+    note        TEXT NOT NULL DEFAULT '',
+    snapshot    TEXT NOT NULL,
+    UNIQUE (employee_id, month)
+  );
+
   -- Simple on/off settings for the counter app (waiter phones, auto-print, ...). Values are JSON.
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,

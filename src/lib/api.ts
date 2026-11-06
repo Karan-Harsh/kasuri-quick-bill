@@ -39,6 +39,7 @@ const TOPIC_QUERIES: Record<string, QueryKey[]> = {
   settings: [["organization-settings"], ["app-settings"]],
   tables: [["tables"]],
   devices: [["devices"]],
+  staff: [["staff"]],
 };
 
 /** A waiter sent an order to the kitchen from a phone. */

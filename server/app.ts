@@ -291,6 +291,96 @@ export function createApp(opts: AppOptions) {
     store.report(query.get("from") ?? "", query.get("to") ?? ""),
   );
 
+  // ----- staff, attendance and salary (counter only: phones must never see salaries) -----
+  const staff = store.staff;
+  const id = (params: Record<string, string>) => Number(params.id);
+  route("GET", "/api/staff/settings", "counter", () => staff.settings());
+  route(
+    "PUT",
+    "/api/staff/settings",
+    "counter",
+    change(["staff"], ({ body }) => staff.saveSettings(body ?? {})),
+  );
+  route("GET", "/api/staff/employees", "counter", () => staff.employees());
+  route("GET", "/api/staff/employees/:id", "counter", ({ params }) => staff.employee(id(params)));
+  route(
+    "POST",
+    "/api/staff/employees",
+    "counter",
+    change(["staff"], ({ body }) => staff.createEmployee(body ?? {})),
+  );
+  route(
+    "PUT",
+    "/api/staff/employees/:id",
+    "counter",
+    change(["staff"], ({ params, body }) => staff.updateEmployee(id(params), body ?? {})),
+  );
+  route(
+    "DELETE",
+    "/api/staff/employees/:id",
+    "counter",
+    change(["staff"], ({ params }) => staff.deleteEmployee(id(params))),
+  );
+  route("GET", "/api/staff/attendance", "counter", ({ query }) =>
+    query.get("date")
+      ? staff.attendanceForDate(query.get("date")!)
+      : staff.attendanceForMonth(query.get("month") ?? ""),
+  );
+  route(
+    "PUT",
+    "/api/staff/attendance",
+    "counter",
+    change(["staff"], ({ body }) => staff.saveAttendance(body?.records)),
+  );
+  route("GET", "/api/staff/adjustments", "counter", ({ query }) =>
+    query.get("employee")
+      ? staff.adjustmentsForEmployee(Number(query.get("employee")))
+      : staff.adjustmentsForMonth(query.get("month") ?? ""),
+  );
+  route(
+    "POST",
+    "/api/staff/adjustments",
+    "counter",
+    change(["staff"], ({ body }) => staff.addAdjustment(body ?? {})),
+  );
+  route(
+    "DELETE",
+    "/api/staff/adjustments/:id",
+    "counter",
+    change(["staff"], ({ params }) => staff.deleteAdjustment(id(params))),
+  );
+  route("GET", "/api/staff/payroll", "counter", ({ query }) =>
+    staff.payroll(query.get("month") ?? ""),
+  );
+  route(
+    "POST",
+    "/api/staff/payments",
+    "counter",
+    change(["staff"], ({ body }) => staff.pay(body ?? {})),
+  );
+  route(
+    "DELETE",
+    "/api/staff/payments/:id",
+    "counter",
+    change(["staff"], ({ params }) => staff.undoPayment(id(params))),
+  );
+  route("GET", "/api/staff/employees/:id/payments", "counter", ({ params }) =>
+    staff.paymentsForEmployee(id(params)),
+  );
+
+  /** Saves a CSV export into the Downloads folder. body: { name: "x.csv", contents: "..." } */
+  route("POST", "/api/files/csv", "counter", ({ body }) => {
+    if (!opts.saveDownload) throw new AppError("Saving files isn't available here", 500);
+    const name = String(body?.name ?? "")
+      .replace(/[\\/:*?"<>|]/g, "")
+      .trim();
+    if (!/^[\w .()-]{1,80}\.csv$/i.test(name)) throw new AppError("Invalid file name");
+    if (typeof body?.contents !== "string") throw new AppError("Nothing to save");
+    if (body.contents.length > 5 * 1024 * 1024) throw new AppError("This export is too big");
+    // UTF-8 marker first, so Excel shows ₹ and names correctly.
+    return { path: opts.saveDownload(name, new TextEncoder().encode("\ufeff" + body.contents)) };
+  });
+
   // ----- Excel setup sheet -----
   route("POST", "/api/setup-sheet/download", "counter", () => {
     if (!opts.saveDownload) throw new AppError("Saving files isn't available here", 500);

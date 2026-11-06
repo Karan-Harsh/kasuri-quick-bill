@@ -3,18 +3,14 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { compatibleUnits, convertQuantity } from "../src/lib/inventory";
 import { computeTotals } from "../src/lib/kasuri";
 import { nextCounter, now, seedStarterData, uuid } from "./db";
+import { AppError } from "./errors";
+import { StaffStore } from "./staff-store";
 
-export class AppError extends Error {
-  constructor(
-    message: string,
-    public status = 400,
-  ) {
-    super(message);
-  }
-}
+export { AppError };
 
 /** What changed, so connected screens know what to reload. */
-export type Topic = "orders" | "kitchen" | "menu" | "inventory" | "settings" | "tables" | "devices";
+export type Topic =
+  "orders" | "kitchen" | "menu" | "inventory" | "settings" | "tables" | "devices" | "staff";
 
 /** On/off settings of the counter app. */
 export interface AppSettings {
@@ -81,7 +77,12 @@ export class Store {
   /** The code currently shown on the counter for pairing a new phone (kept in memory only). */
   private pairing: { code: string; expires: number; attempts: number } | null = null;
 
-  constructor(private db: Database) {}
+  /** Staff, attendance and salary. */
+  readonly staff: StaffStore;
+
+  constructor(private db: Database) {
+    this.staff = new StaffStore(db);
+  }
 
   private all<T = Row>(sql: string, params: Row = {}): T[] {
     return this.db.query(sql).all(params as never) as T[];
