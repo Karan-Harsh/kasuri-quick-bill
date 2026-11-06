@@ -183,6 +183,17 @@ const SCHEMA = `
     UNIQUE (employee_id, month)
   );
 
+  -- Running costs that aren't stock or salary: rent, electricity, gas, repairs...
+  CREATE TABLE IF NOT EXISTS expenses (
+    id         TEXT PRIMARY KEY,
+    date       TEXT NOT NULL,            -- YYYY-MM-DD (local date the money was spent)
+    category   TEXT NOT NULL,
+    amount     REAL NOT NULL CHECK (amount > 0),
+    note       TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (date);
+
   -- Simple on/off settings for the counter app (waiter phones, auto-print, ...). Values are JSON.
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
@@ -286,6 +297,9 @@ function migrate(db: Database) {
       "CREATE INDEX IF NOT EXISTS inventory_movements_order_idx ON inventory_movements (order_id)",
     );
   }
+  // Amount paid for a delivery ("received"), for profit and loss. NULL = not entered.
+  if (!hasColumn(db, "inventory_movements", "cost"))
+    db.exec("ALTER TABLE inventory_movements ADD COLUMN cost REAL CHECK (cost >= 0)");
 }
 
 /** Adds the 8 tables and the starter menu, skipping anything that already exists. */

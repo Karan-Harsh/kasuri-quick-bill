@@ -33,6 +33,7 @@ import {
   type InventoryMovementType,
   type InventoryUnit,
 } from "@/lib/inventory";
+import { inr } from "@/lib/kasuri";
 import { useInventoryItems } from "@/lib/low-stock";
 
 export const Route = createFileRoute("/inventory")({
@@ -72,6 +73,8 @@ function InventoryPage() {
   const [movement, setMovement] = useState<MovementDialog | null>(null);
   const [movementQty, setMovementQty] = useState("");
   const [movementNote, setMovementNote] = useState("");
+  /** Amount paid for a delivery (Received only), used in profit & loss. */
+  const [movementCost, setMovementCost] = useState("");
 
   const itemsQuery = useInventoryItems();
 
@@ -85,6 +88,7 @@ function InventoryPage() {
           movement_type: InventoryMovementType;
           quantity_change: number;
           quantity_after: number;
+          cost: number | null;
           note: string | null;
           created_at: string;
           inventory_items: { name: string; unit: string } | null;
@@ -130,17 +134,19 @@ function InventoryPage() {
   });
 
   const recordMovement = useMutation({
-    mutationFn: (input: MovementDialog & { quantity: number; note: string }) =>
+    mutationFn: (input: MovementDialog & { quantity: number; note: string; cost: number | null }) =>
       api.post(`/inventory/items/${input.itemId}/movements`, {
         type: input.type,
         quantity: input.quantity,
         note: input.note || null,
+        cost: input.type === "received" ? input.cost : null,
       }),
     onSuccess: () => {
       invalidate();
       setMovement(null);
       setMovementQty("");
       setMovementNote("");
+      setMovementCost("");
       toast.success("Stock updated");
     },
     onError: (error) =>
@@ -273,6 +279,7 @@ function InventoryPage() {
                           type === "count" ? String(Number(item.current_quantity)) : "",
                         );
                         setMovementNote("");
+                        setMovementCost("");
                       }}
                     >
                       {movementLabel(type)}
@@ -328,6 +335,7 @@ function InventoryPage() {
                   <th className="px-4 py-3">Item</th>
                   <th className="px-4 py-3">Change</th>
                   <th className="px-4 py-3">Left</th>
+                  <th className="px-4 py-3 text-right">Paid</th>
                   <th className="px-4 py-3">Note</th>
                 </tr>
               </thead>
@@ -354,13 +362,16 @@ function InventoryPage() {
                       <td className="px-4 py-3">
                         {formatQuantity(Number(row.quantity_after), unit)}
                       </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        {row.cost != null ? inr(Number(row.cost)) : "—"}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{row.note ?? "—"}</td>
                     </tr>
                   );
                 })}
                 {!movementsQuery.isLoading && movements.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-6 text-muted-foreground">
                       Stock changes will show up here after your first update.
                     </td>
                   </tr>
@@ -485,6 +496,25 @@ function InventoryPage() {
                   className="h-11"
                 />
               </div>
+              {movement.type === "received" && (
+                <div className="space-y-2">
+                  <Label htmlFor="moveCost">Amount paid (₹, optional)</Label>
+                  <Input
+                    id="moveCost"
+                    type="number"
+                    min={0}
+                    step="any"
+                    inputMode="decimal"
+                    value={movementCost}
+                    onChange={(e) => setMovementCost(e.target.value)}
+                    placeholder="e.g. 1500"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Counted as ingredient cost in Accounts → profit and loss.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="moveNote">Note (optional)</Label>
                 <Input
@@ -510,10 +540,16 @@ function InventoryPage() {
                   toast.error("Enter a valid quantity");
                   return;
                 }
+                const cost = movementCost.trim() === "" ? null : Number(movementCost);
+                if (cost != null && !(cost >= 0)) {
+                  toast.error("Enter a valid amount paid");
+                  return;
+                }
                 recordMovement.mutate({
                   ...movement,
                   quantity,
                   note: movementNote,
+                  cost,
                 });
               }}
             >

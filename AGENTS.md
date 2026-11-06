@@ -14,7 +14,8 @@ and staff attendance & salary (merged in from the former Kasuri Staff & Salary a
 - Routes live in `src/routes/` (file-based TanStack Router). Do not add Next.js-style `pages/`.
 - Business logic for totals and formatting: `src/lib/kasuri.ts`
 - All data access goes through the local server: `server/store.ts` (business rules; staff and salary in
-  `server/staff-store.ts`, reached as `store.staff`) and `server/main.ts` (HTTP routes).
+  `server/staff-store.ts`, reached as `store.staff`; expenses and profit & loss in `server/accounts-store.ts`,
+  `store.accounts`) and `server/main.ts` (HTTP routes).
   The salary calculation is `src/lib/payroll.ts` (pure, shared by server and screens). Staff routes are all `"counter"`.
   Screens call it with `api` from `src/lib/api.ts`. Never put business rules only in a screen.
 - After changing data, the server broadcasts a topic (`orders`, `kitchen`, `menu`, ...) so open screens refresh.

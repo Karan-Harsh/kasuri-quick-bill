@@ -368,6 +368,28 @@ export function createApp(opts: AppOptions) {
     staff.paymentsForEmployee(id(params)),
   );
 
+  // ----- expenses and profit & loss (counter only) -----
+  const accounts = store.accounts;
+  route("GET", "/api/expenses", "counter", ({ query }) =>
+    accounts.expenses(query.get("from") ?? "", query.get("to") ?? ""),
+  );
+  route("GET", "/api/expenses/categories", "counter", () => accounts.expenseCategories());
+  route(
+    "POST",
+    "/api/expenses",
+    "counter",
+    change(["accounts"], ({ body }) => accounts.addExpense(body ?? {})),
+  );
+  route(
+    "DELETE",
+    "/api/expenses/:id",
+    "counter",
+    change(["accounts"], ({ params }) => accounts.deleteExpense(params.id!)),
+  );
+  route("GET", "/api/profit-and-loss", "counter", ({ query }) =>
+    accounts.profitAndLoss(query.get("from") ?? "", query.get("to") ?? ""),
+  );
+
   /** Saves a CSV export into the Downloads folder. body: { name: "x.csv", contents: "..." } */
   route("POST", "/api/files/csv", "counter", ({ body }) => {
     if (!opts.saveDownload) throw new AppError("Saving files isn't available here", 500);
@@ -427,7 +449,14 @@ export function createApp(opts: AppOptions) {
     "/api/inventory/items/:id/movements",
     "counter",
     change(["inventory"], ({ params, body }) =>
-      store.recordMovement(params.id!, body?.type, Number(body?.quantity), body?.note),
+      store.recordMovement(
+        params.id!,
+        body?.type,
+        Number(body?.quantity),
+        body?.note,
+        null,
+        body?.cost,
+      ),
     ),
   );
   route("GET", "/api/inventory/movements", "counter", ({ query }) =>

@@ -4,13 +4,22 @@ import { compatibleUnits, convertQuantity } from "../src/lib/inventory";
 import { computeTotals } from "../src/lib/kasuri";
 import { nextCounter, now, seedStarterData, uuid } from "./db";
 import { AppError } from "./errors";
+import { AccountsStore } from "./accounts-store";
 import { StaffStore } from "./staff-store";
 
 export { AppError };
 
 /** What changed, so connected screens know what to reload. */
 export type Topic =
-  "orders" | "kitchen" | "menu" | "inventory" | "settings" | "tables" | "devices" | "staff";
+  | "orders"
+  | "kitchen"
+  | "menu"
+  | "inventory"
+  | "settings"
+  | "tables"
+  | "devices"
+  | "staff"
+  | "accounts";
 
 /** On/off settings of the counter app. */
 export interface AppSettings {
@@ -79,9 +88,12 @@ export class Store {
 
   /** Staff, attendance and salary. */
   readonly staff: StaffStore;
+  /** Expenses and profit & loss. */
+  readonly accounts: AccountsStore;
 
   constructor(private db: Database) {
     this.staff = new StaffStore(db);
+    this.accounts = new AccountsStore(db, this.staff);
   }
 
   private all<T = Row>(sql: string, params: Row = {}): T[] {
@@ -885,7 +897,7 @@ export class Store {
   inventoryMovements(limit = 30) {
     const rows = this.all<Row>(
       `SELECT m.id, m.item_id, m.movement_type, m.quantity_change, m.quantity_after, m.note, m.created_at,
-              i.name AS item_name, i.unit AS item_unit
+              m.cost, i.name AS item_name, i.unit AS item_unit
        FROM inventory_movements m JOIN inventory_items i ON i.id = m.item_id
        ORDER BY m.created_at DESC, m.rowid DESC LIMIT $limit`,
       { limit: Math.min(Math.max(Number(limit) || 30, 1), 500) },
@@ -977,8 +989,15 @@ export class Store {
     quantity: number,
     note?: string | null,
     createdBy: string | null = null,
+    /** Amount paid, for a delivery ("received") only. */
+    cost?: number | string | null,
   ) {
     if (!MOVEMENT_TYPES.includes(type)) throw new AppError("Invalid stock update type");
+    const paid = cost == null || cost === "" ? null : Number(cost);
+    if (paid != null && !(Number.isFinite(paid) && paid >= 0))
+      throw new AppError("Amount paid must be zero or more");
+    if (paid != null && type !== "received")
+      throw new AppError("Amount paid can only be entered for stock received");
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty < 0) throw new AppError("Quantity must be zero or positive");
     if (type !== "count" && qty === 0)
@@ -1003,7 +1022,7 @@ export class Store {
       }
       if (next < 0)
         throw new AppError(`Not enough stock (have ${item.current_quantity} ${item.unit})`);
-      this.writeStock(itemId, type, next, item.current_quantity, note, createdBy);
+      this.writeStock(itemId, type, next, item.current_quantity, note, createdBy, null, paid);
       return { current_quantity: next };
     });
   }
@@ -1017,6 +1036,7 @@ export class Store {
     note: string | null | undefined,
     createdBy: string | null,
     orderId: string | null = null,
+    cost: number | null = null,
   ) {
     const at = now();
     this.run("UPDATE inventory_items SET current_quantity = $q, updated_at = $at WHERE id = $id", {
@@ -1025,8 +1045,8 @@ export class Store {
       id: itemId,
     });
     this.run(
-      `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at, order_id)
-       VALUES ($id, $item, $type, $delta, $after, $note, $by, $at, $order)`,
+      `INSERT INTO inventory_movements (id, item_id, movement_type, quantity_change, quantity_after, note, created_by, created_at, order_id, cost)
+       VALUES ($id, $item, $type, $delta, $after, $note, $by, $at, $order, $cost)`,
       {
         id: uuid(),
         item: itemId,
@@ -1037,6 +1057,7 @@ export class Store {
         by: createdBy,
         at,
         order: orderId,
+        cost: cost == null ? null : Math.round(cost * 100) / 100,
       },
     );
   }

@@ -8,7 +8,8 @@ Restaurant billing for the Kasuri counter — a Windows desktop app that works w
 - **Billing** — discounts, optional GST, cash / UPI / card, printed bill.
 - **Menu** — categories, prices, GST rate per dish, turn dishes on or off.
 - **Reports** — sales by day / week / month, dine-in vs parcel, payment methods, item-wise, and every bill (cancel or erase a bill from there).
-- **Inventory** — stock of kitchen staples with used / received / counted updates; dish recipes use stock up automatically, with low-stock warnings.
+- **Inventory** — stock of kitchen staples with used / received (with amount paid) / counted updates; dish recipes use stock up automatically, with low-stock warnings.
+- **Accounts** — profit and loss by month (sales − ingredients bought − salaries − expenses) and a list of running costs like rent and electricity.
 - **Staff** — daily attendance, monthly timesheet, salary with leave cuts / overtime / advances / bonuses, salary slips (merged in from the separate Kasuri Staff & Salary app).
 - **Waiter phones** — waiters take orders on their phones over the restaurant Wi-Fi.
 - **Backups** — automatic daily copy of all data on this computer.

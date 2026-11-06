@@ -32,14 +32,24 @@ export const api = {
 
 /** Which cached screens to reload when the server says a topic changed. */
 const TOPIC_QUERIES: Record<string, QueryKey[]> = {
-  orders: [["open-orders"], ["order"], ["order-items"], ["today-stats"], ["receipt"], ["reports"]],
+  // Profit & loss ("accounts") depends on bills, stock deliveries and salaries, so those refresh it too.
+  orders: [
+    ["open-orders"],
+    ["order"],
+    ["order-items"],
+    ["today-stats"],
+    ["receipt"],
+    ["reports"],
+    ["accounts"],
+  ],
   kitchen: [["kitchen-tickets"], ["kot"], ["open-orders"]],
   menu: [["categories"], ["menu-items"], ["menu-ingredients"]],
-  inventory: [["inventory-items"], ["inventory-movements"]],
+  inventory: [["inventory-items"], ["inventory-movements"], ["accounts"]],
   settings: [["organization-settings"], ["app-settings"]],
   tables: [["tables"]],
   devices: [["devices"]],
-  staff: [["staff"]],
+  staff: [["staff"], ["accounts"]],
+  accounts: [["accounts"]],
 };
 
 /** A waiter sent an order to the kitchen from a phone. */
