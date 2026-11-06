@@ -1,64 +1,61 @@
-// Estimated ingredients for every dish on the Kasuri menu (rough guesses, to be checked by the kitchen).
-//
-//   bun scripts/estimated-recipes.ts [output.xlsx]
-//
-// Writes an Excel setup sheet (Settings → Excel setup) with the stock items and a recipe for every
-// dish. Only the main, weighable ingredients are tracked; spices, salt, ginger-garlic etc. are left out.
-// Amounts are for a FULL portion; a Half is ~60% of it (unless a dish gives its own half amounts).
-// "Stock now" is left empty so uploading never changes current stock.
-import { openDatabase } from "../server/db";
-import { buildSetupWorkbook } from "../server/setup-sheet";
-import { KASURI_MENU } from "../server/starter-menu";
-import { Store } from "../server/store";
-import { writeXlsx, type Cell } from "../server/xlsx";
+// Starting stock items, prices and recipes for the Kasuri menu: rough estimates to begin with.
+// Prices are per kg / L / piece and change day to day: set real ones in Inventory (or an Excel
+// upload), and recording a delivery with the amount paid updates them.
+// Recipes are for a FULL plate of the main, weighable ingredients only (no spices, salt, etc.);
+// a half plate uses HALF_PORTION (60%) of it.
+import type { Database } from "bun:sqlite";
+import { now, uuid } from "./db";
 
-// ---------- stock items: name, unit, suggested "warn below" ----------
-
-export const STOCK: [name: string, unit: string, warnBelow: number][] = [
-  ["Paneer", "kg", 2],
-  ["Chicken (boneless)", "kg", 3],
-  ["Chicken (with bone)", "kg", 3],
-  ["Chicken liver (kaleji)", "kg", 1],
-  ["Mutton", "kg", 2],
-  ["Fish", "kg", 2],
-  ["Eggs", "pcs", 30],
-  ["Mushroom", "kg", 1],
-  ["Baby corn", "kg", 1],
-  ["Sweet corn", "kg", 1],
-  ["Potato", "kg", 5],
-  ["Onion", "kg", 5],
-  ["Tomato", "kg", 5],
-  ["Capsicum", "kg", 2],
-  ["Cabbage", "kg", 2],
-  ["Carrot", "kg", 2],
-  ["Cauliflower", "kg", 2],
-  ["Green peas", "kg", 2],
-  ["Spinach (palak)", "kg", 1],
-  ["Bhindi", "kg", 1],
-  ["Basmati rice", "kg", 10],
-  ["Atta", "kg", 10],
-  ["Maida", "kg", 5],
-  ["Besan", "kg", 2],
-  ["Cornflour", "kg", 2],
-  ["Hakka noodles", "kg", 2],
-  ["Yellow dal", "kg", 3],
-  ["Black dal (urad)", "kg", 2],
-  ["Kabuli chana", "kg", 2],
-  ["Cooking oil", "L", 5],
-  ["Butter", "kg", 1],
-  ["Fresh cream", "L", 1],
-  ["Curd", "kg", 2],
-  ["Milk", "L", 2],
-  ["Cheese", "kg", 0.5],
-  ["Cashew", "kg", 0.5],
-  ["Chinese sauces (soy/chilli)", "L", 1],
-  ["Papad", "pcs", 20],
-  ["Water bottle", "pcs", 24],
+export const STARTER_STOCK: [
+  name: string,
+  unit: string,
+  warnBelow: number,
+  pricePerUnit: number,
+][] = [
+  ["Paneer", "kg", 2, 360],
+  ["Chicken (boneless)", "kg", 3, 280],
+  ["Chicken (with bone)", "kg", 3, 200],
+  ["Chicken liver (kaleji)", "kg", 1, 160],
+  ["Mutton", "kg", 2, 750],
+  ["Fish", "kg", 2, 300],
+  ["Eggs", "pcs", 30, 6],
+  ["Mushroom", "kg", 1, 200],
+  ["Baby corn", "kg", 1, 160],
+  ["Sweet corn", "kg", 1, 100],
+  ["Potato", "kg", 5, 25],
+  ["Onion", "kg", 5, 35],
+  ["Tomato", "kg", 5, 30],
+  ["Capsicum", "kg", 2, 60],
+  ["Cabbage", "kg", 2, 25],
+  ["Carrot", "kg", 2, 40],
+  ["Cauliflower", "kg", 2, 40],
+  ["Green peas", "kg", 2, 80],
+  ["Spinach (palak)", "kg", 1, 40],
+  ["Bhindi", "kg", 1, 50],
+  ["Basmati rice", "kg", 10, 90],
+  ["Atta", "kg", 10, 35],
+  ["Maida", "kg", 5, 40],
+  ["Besan", "kg", 2, 90],
+  ["Cornflour", "kg", 2, 60],
+  ["Hakka noodles", "kg", 2, 120],
+  ["Yellow dal", "kg", 3, 130],
+  ["Black dal (urad)", "kg", 2, 130],
+  ["Kabuli chana", "kg", 2, 110],
+  ["Cooking oil", "L", 5, 140],
+  ["Butter", "kg", 1, 520],
+  ["Fresh cream", "L", 1, 220],
+  ["Curd", "kg", 2, 70],
+  ["Milk", "L", 2, 60],
+  ["Cheese", "kg", 0.5, 500],
+  ["Cashew", "kg", 0.5, 900],
+  ["Chinese sauces (soy/chilli)", "L", 1, 120],
+  ["Papad", "pcs", 20, 2],
+  ["Water bottle", "pcs", 24, 10],
 ];
 
-const UNIT = Object.fromEntries(STOCK.map(([n, u]) => [n, u]));
+const UNIT = Object.fromEntries(STARTER_STOCK.map(([n, u]) => [n, u]));
 /** Recipe unit: grams / ml / pieces. */
-const recipeUnit = (item: string) =>
+export const recipeUnit = (item: string) =>
   UNIT[item] === "kg" ? "g" : UNIT[item] === "L" ? "ml" : "pcs";
 
 // ---------- building blocks (full portion) ----------
@@ -121,7 +118,7 @@ const TANDOORI_MARINADE: Recipe = { Curd: 60, "Cooking oil": 15 };
 
 // ---------- every dish (name as on the menu, before Half/Full) ----------
 
-export const RECIPES: Record<string, Recipe | { full: Recipe; half: Recipe }> = {
+export const STARTER_RECIPES: Record<string, Recipe> = {
   // Soup (Veg)
   "Veg Manchow": add(SOUP_BASE, { Capsicum: 15, "Hakka noodles": 15 }),
   "Veg Hot & Sour": add(SOUP_BASE, { "Chinese sauces (soy/chilli)": 10 }),
@@ -258,13 +255,12 @@ export const RECIPES: Record<string, Recipe | { full: Recipe; half: Recipe }> = 
   "Murg Aachari Tikka": add(TANDOORI_MARINADE, { "Chicken (boneless)": 250 }),
   "Murg Lasuni Kabab": add(TANDOORI_MARINADE, { "Chicken (boneless)": 250 }),
   "Murg Banjara Kabab": add(TANDOORI_MARINADE, { "Chicken (boneless)": 250 }),
-  "Tandoori Chicken": {
-    full: { "Chicken (with bone)": 800, Curd: 120, "Cooking oil": 20, Butter: 10 },
-    half: { "Chicken (with bone)": 400, Curd: 60, "Cooking oil": 10, Butter: 5 },
-  },
+  "Tandoori Chicken": { "Chicken (with bone)": 800, Curd: 120, "Cooking oil": 20, Butter: 10 },
   "Murg Pahadi Kabab": {
-    full: { "Chicken (boneless)": 400, Curd: 80, "Spinach (palak)": 40, "Cooking oil": 20 },
-    half: { "Chicken (boneless)": 200, Curd: 40, "Spinach (palak)": 20, "Cooking oil": 10 },
+    "Chicken (boneless)": 400,
+    Curd: 80,
+    "Spinach (palak)": 40,
+    "Cooking oil": 20,
   },
   // Chinese Main Course (Veg) — with gravy
   "Paneer Chilli": add(CHINESE, { Paneer: 150, Cornflour: 10 }),
@@ -504,65 +500,48 @@ export const RECIPES: Record<string, Recipe | { full: Recipe; half: Recipe }> = 
   }),
 };
 
-const HALF = 0.6;
-const roundTo = (n: number, unit: string) =>
-  unit === "pcs" ? Math.max(1, Math.round(n)) : Math.max(5, Math.round(n / 5) * 5);
-
-/** Every dish as it appears in the app ("X (Half)" / "X (Full)" / "X"), with its recipe lines. */
-export function estimatedRecipes() {
-  const out: { dish: string; item: string; qty: number; unit: string }[] = [];
-  const missing: string[] = [];
-  for (const { dishes } of KASURI_MENU) {
-    for (const [name, half] of dishes) {
-      const r = RECIPES[name];
-      if (!r) {
-        missing.push(name);
-        continue;
-      }
-      const full = "full" in r ? (r.full as Recipe) : (r as Recipe);
-      const halfRecipe: Recipe =
-        "half" in r
-          ? (r.half as Recipe)
-          : Object.fromEntries(Object.entries(full).map(([k, v]) => [k, v * HALF]));
-      const sizes: [string, Recipe][] =
-        half == null
-          ? [[name, full]]
-          : [
-              [`${name} (Half)`, halfRecipe],
-              [`${name} (Full)`, full],
-            ];
-      for (const [dish, recipe] of sizes)
-        for (const [item, qty] of Object.entries(recipe)) {
-          if (!UNIT[item]) throw new Error(`${name}: unknown stock item "${item}"`);
-          const unit = recipeUnit(item);
-          out.push({ dish, item, qty: roundTo(qty, unit), unit });
-        }
+/** Adds the starting stock items (no stock yet) and the recipes of dishes found by name. */
+export function seedStarterInventory(db: Database) {
+  const at = now();
+  const ids = new Map<string, string>();
+  for (const [name, unit, warn, price] of STARTER_STOCK) {
+    const existing = db
+      .query<{ id: string }, { name: string }>(
+        "SELECT id FROM inventory_items WHERE lower(name) = lower($name)",
+      )
+      .get({ name });
+    if (existing) {
+      ids.set(name, existing.id);
+      continue;
+    }
+    const id = uuid();
+    db.query(
+      `INSERT INTO inventory_items (id, name, unit, current_quantity, low_stock_level, price_per_unit, is_active, created_at, updated_at)
+       VALUES ($id, $name, $unit, 0, $warn, $price, 1, $at, $at)`,
+    ).run({ id, name, unit, warn, price, at });
+    ids.set(name, id);
+  }
+  for (const [dish, recipe] of Object.entries(STARTER_RECIPES)) {
+    const item = db
+      .query<{ id: string }, { name: string }>("SELECT id FROM menu_items WHERE name = $name")
+      .get({ name: dish });
+    if (!item) continue;
+    const hasRecipe = db
+      .query("SELECT 1 FROM menu_item_ingredients WHERE menu_item_id = $id")
+      .get({ id: item.id });
+    if (hasRecipe) continue;
+    for (const [stock, qty] of Object.entries(recipe)) {
+      const unit = recipeUnit(stock);
+      db.query(
+        `INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity, unit)
+         VALUES ($id, $m, $inv, $q, $u)`,
+      ).run({
+        id: uuid(),
+        m: item.id,
+        inv: ids.get(stock)!,
+        q: unit === "pcs" ? Math.max(1, Math.round(qty)) : Math.max(5, Math.round(qty / 5) * 5),
+        u: unit,
+      });
     }
   }
-  if (missing.length) throw new Error(`No recipe for: ${missing.join(", ")}`);
-  const onMenu = new Set(KASURI_MENU.flatMap((c) => c.dishes.map(([n]) => n)));
-  const unused = Object.keys(RECIPES).filter((n) => !onMenu.has(n));
-  if (unused.length) throw new Error(`Recipes for dishes not on the menu: ${unused.join(", ")}`);
-  return out;
-}
-
-/** The setup workbook: How to use + Inventory (no "Stock now") + Menu + Recipes, all estimated. */
-export function estimatedWorkbook() {
-  // Build it the same way the app does (fresh database with the Kasuri menu), then fill it in.
-  const store = new Store(openDatabase(":memory:"));
-  const sheets = buildSetupWorkbook(store);
-  const inventory = sheets.find((s) => s.name === "Inventory")!;
-  inventory.rows = [inventory.rows[0]!, ...STOCK.map(([n, u, w]): Cell[] => [n, u, null, w])];
-  const recipes = sheets.find((s) => s.name === "Recipes")!;
-  recipes.rows = [
-    recipes.rows[0]!,
-    ...estimatedRecipes().map((r): Cell[] => [r.dish, r.item, r.qty, r.unit]),
-  ];
-  return sheets;
-}
-
-if (import.meta.main) {
-  const file = process.argv[2] ?? "Kasuri recipes (estimated).xlsx";
-  await Bun.write(file, writeXlsx(estimatedWorkbook()));
-  console.log(`Wrote ${file}`);
 }

@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { DEMO_MENU, DEMO_TAX, flattenMenu, KASURI_MENU } from "./starter-menu";
+import { seedStarterInventory } from "./starter-inventory";
 import { KASURI_STAFF, STARTER_ALLOWED_LEAVES } from "./starter-staff";
 
 // Database schema. Ids are text UUIDs (used in screen URLs such as /order/$orderId).
@@ -245,11 +246,15 @@ export function openDatabase(path: string, opts: { starterMenu?: StarterMenuName
         "INSERT OR IGNORE INTO counters (name, value) VALUES ('bill_number', 1000), ('kot_number', 0)",
       ).run();
       seedStarterData(db, opts.starterMenu ?? "kasuri");
-      // The restaurant's staff (not for test databases, which use the demo menu).
-      if ((opts.starterMenu ?? "kasuri") === "kasuri") seedStarterStaff(db);
+      // The restaurant's staff, stock items and recipes (not for test databases: demo menu).
+      if ((opts.starterMenu ?? "kasuri") === "kasuri") {
+        seedStarterStaff(db);
+        seedStarterInventory(db);
+      }
     })();
   } else {
     replaceUntouchedDemoMenu(db);
+    mergeHalfFullPairs(db);
   }
   return db;
 }
@@ -279,6 +284,18 @@ function migrate(db: Database) {
       "CREATE INDEX IF NOT EXISTS inventory_movements_order_idx ON inventory_movements (order_id)",
     );
   }
+  // Half plates: a dish's half price (NULL = no half), and which portion each bill line is.
+  if (!hasColumn(db, "menu_items", "half_price"))
+    db.exec("ALTER TABLE menu_items ADD COLUMN half_price REAL CHECK (half_price >= 0)");
+  if (!hasColumn(db, "order_items", "portion"))
+    db.exec(
+      "ALTER TABLE order_items ADD COLUMN portion TEXT NOT NULL DEFAULT 'full' CHECK (portion IN ('full','half'))",
+    );
+  // Current price per unit of a stock item (per kg, L or piece). NULL = not known yet.
+  if (!hasColumn(db, "inventory_items", "price_per_unit"))
+    db.exec(
+      "ALTER TABLE inventory_items ADD COLUMN price_per_unit REAL CHECK (price_per_unit >= 0)",
+    );
   // Amount paid for a delivery ("received"), for profit and loss. NULL = not entered.
   if (!hasColumn(db, "inventory_movements", "cost"))
     db.exec("ALTER TABLE inventory_movements ADD COLUMN cost REAL CHECK (cost >= 0)");
@@ -327,13 +344,14 @@ export function seedStarterData(db: Database, which: StarterMenuName = "kasuri")
       .get({ name: m.name });
     if (exists) continue;
     db.query(
-      `INSERT INTO menu_items (id, category_id, name, price, tax_rate, is_active, created_at, updated_at)
-       VALUES ($id, $cat, $name, $price, $tax, 1, $at, $at)`,
+      `INSERT INTO menu_items (id, category_id, name, price, half_price, tax_rate, is_active, created_at, updated_at)
+       VALUES ($id, $cat, $name, $price, $half, $tax, 1, $at, $at)`,
     ).run({
       id: uuid(),
       cat: categoryId.get(m.category)!,
       name: m.name,
       price: m.price,
+      half: m.half_price,
       tax: which === "demo" ? (DEMO_TAX[m.name] ?? 5) : 5,
       at,
     });
@@ -399,8 +417,43 @@ export function replaceUntouchedDemoMenu(db: Database): boolean {
     db.exec("DELETE FROM menu_items");
     db.exec("DELETE FROM categories");
     seedStarterData(db, "kasuri");
+    // A copy that never set up stock also gets the starting stock items and recipes.
+    if (!db.query("SELECT 1 FROM inventory_items LIMIT 1").get()) seedStarterInventory(db);
   })();
   return true;
+}
+
+/**
+ * Version 1.1 (before release) listed half and full plates as two dishes, "X (Half)" and "X (Full)".
+ * Each such pair in the same category becomes one dish "X" with a half price; the Full dish's recipe
+ * is kept (a half plate uses 60% of it). Past bills keep their own names and prices.
+ */
+export function mergeHalfFullPairs(db: Database): number {
+  const pairs = db
+    .query<{ half_id: string; full_id: string; base: string; half_price: number }, []>(
+      `SELECT h.id AS half_id, f.id AS full_id, substr(f.name, 1, length(f.name) - 7) AS base,
+              h.price AS half_price
+       FROM menu_items f JOIN menu_items h
+         ON h.category_id = f.category_id
+        AND h.name = substr(f.name, 1, length(f.name) - 7) || ' (Half)'
+       WHERE f.name LIKE '% (Full)'`,
+    )
+    .all();
+  let merged = 0;
+  db.transaction(() => {
+    for (const p of pairs) {
+      const clash = db
+        .query("SELECT 1 FROM menu_items WHERE lower(name) = lower($n) AND id != $id")
+        .get({ n: p.base, id: p.full_id });
+      if (clash) continue;
+      db.query(
+        "UPDATE menu_items SET name = $n, half_price = $h, updated_at = $at WHERE id = $id",
+      ).run({ n: p.base, h: p.half_price, at: now(), id: p.full_id });
+      db.query("DELETE FROM menu_items WHERE id = $id").run({ id: p.half_id });
+      merged++;
+    }
+  })();
+  return merged;
 }
 
 /** Next value of a counter (bill and KOT numbers). Numbers are never reused, even if a bill is discarded. */

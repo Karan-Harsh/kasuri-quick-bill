@@ -55,8 +55,14 @@ export function convertQuantity(quantity: number, from: string, to: string): num
   return (quantity * sizes[from]!) / sizes[to]!;
 }
 
-/** Stock is low when a minimum level is set and the current quantity has gone below it. */
-export function isLowStock(item: { current_quantity: number; low_stock_level: number | null }) {
+/** Stock is low when a minimum level is set and the current quantity has gone below it.
+ *  An item whose stock was never entered (tracked = false) isn't low, just not counted yet. */
+export function isLowStock(item: {
+  current_quantity: number;
+  low_stock_level: number | null;
+  tracked?: boolean;
+}) {
+  if (item.tracked === false) return false;
   return (
     item.low_stock_level != null && Number(item.current_quantity) < Number(item.low_stock_level)
   );

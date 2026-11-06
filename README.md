@@ -3,12 +3,12 @@
 Restaurant billing for the Kasuri counter — a Windows desktop app that works with no internet.
 
 - **Tables** — 8 tables on one board, showing free / occupied / ready to serve, plus parcel bills.
-- **Orders** — tap dishes by category, adjust quantities, send new items to the kitchen as a KOT.
+- **Orders** — find dishes by name or category, pick Full or Half for dishes sold in two sizes, adjust quantities, send new items to the kitchen as a KOT.
 - **Kitchen** — live kitchen screen and printed KOTs; marks orders ready to serve.
 - **Billing** — discounts, optional GST, cash / UPI / card, printed bill.
-- **Menu** — categories, prices, GST rate per dish, turn dishes on or off.
+- **Menu** — Kasuri's full menu built in: categories, prices and half-plate prices, GST rate per dish, recipes, turn dishes on or off, search.
 - **Reports** — sales by day / week / month, dine-in vs parcel, payment methods, item-wise, and every bill (cancel or erase a bill from there).
-- **Inventory** — stock of kitchen staples with used / received (with amount paid) / counted updates; dish recipes use stock up automatically, with low-stock warnings.
+- **Inventory** — stock of kitchen staples (starting list with rough prices built in) with used / received (at that day's price) / counted updates; dish recipes use stock up automatically, with low-stock warnings.
 - **Accounts** — profit and loss by month (sales − ingredients bought − salaries − expenses) and a list of running costs like rent and electricity.
 - **Staff** — daily attendance, monthly timesheet, salary with leave cuts / overtime / advances / bonuses, salary slips (merged in from the separate Kasuri Staff & Salary app).
 - **Waiter phones** — waiters take orders on their phones over the restaurant Wi-Fi.

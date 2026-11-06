@@ -134,7 +134,9 @@ export function createApp(opts: AppOptions) {
     "POST",
     "/api/orders/:id/items",
     "waiter",
-    change(["orders"], ({ params, body }) => store.addItem(params.id!, body?.menu_item_id)),
+    change(["orders"], ({ params, body }) =>
+      store.addItem(params.id!, body?.menu_item_id, body?.portion === "half" ? "half" : "full"),
+    ),
   );
   route(
     "PATCH",

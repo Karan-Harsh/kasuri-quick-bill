@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChefHat, Minus, Plus, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, ChefHat, Minus, Plus, Search, WifiOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,8 +41,18 @@ interface MenuItem {
   id: string;
   name: string;
   price: number;
+  /** Price of a half plate; null = no half plate. */
+  half_price: number | null;
   category_id: string;
 }
+
+type Portion = "full" | "half";
+/** A tap saved while offline: the dish id, with ":half" for a half plate. */
+const tapKey = (id: string, portion: Portion) => (portion === "half" ? `${id}:half` : id);
+const parseTap = (tap: string) => {
+  const [id = "", half] = tap.split(":");
+  return { id, portion: (half === "half" ? "half" : "full") as Portion };
+};
 interface Category {
   id: string;
   name: string;
@@ -304,6 +314,8 @@ function OrderScreen({
 }) {
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<string | null>(null);
+  /** Finds dishes by name across every category. */
+  const [search, setSearch] = useState("");
   const [pending, setPending] = usePendingTaps(orderId);
   const [flushing, setFlushing] = useState(false);
 
@@ -332,11 +344,11 @@ function OrderScreen({
     e instanceof NotPairedError ? onUnpaired(e.message) : toast.error(errorText(e));
 
   const addItem = useMutation({
-    mutationFn: (menuItemId: string) =>
-      api.post(`/orders/${orderId}/items`, { menu_item_id: menuItemId }),
+    mutationFn: (tap: { id: string; portion: Portion }) =>
+      api.post(`/orders/${orderId}/items`, { menu_item_id: tap.id, portion: tap.portion }),
     onSuccess: refresh,
-    onError: (e, menuItemId) => {
-      if (e instanceof OfflineError) setPending((p) => [...p, menuItemId]);
+    onError: (e, tap) => {
+      if (e instanceof OfflineError) setPending((p) => [...p, tapKey(tap.id, tap.portion)]);
       else fail(e);
     },
   });
@@ -374,9 +386,10 @@ function OrderScreen({
     setFlushing(true);
     (async () => {
       let sent = 0;
-      for (const menuItemId of pending) {
+      for (const tap of pending) {
         try {
-          await api.post(`/orders/${orderId}/items`, { menu_item_id: menuItemId });
+          const { id, portion } = parseTap(tap);
+          await api.post(`/orders/${orderId}/items`, { menu_item_id: id, portion });
           sent++;
         } catch (e) {
           if (e instanceof OfflineError) break;
@@ -394,6 +407,11 @@ function OrderScreen({
   const categories = categoriesQuery.data ?? [];
   const activeCategory = category ?? categories[0]?.id ?? null;
   const menu = menuQuery.data ?? [];
+  // Every word typed must appear in the name ("pan chil" → Paneer Chilli), across all categories.
+  const searchWords = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const shownMenu = searchWords.length
+    ? menu.filter((m) => searchWords.every((w) => m.name.toLowerCase().includes(w)))
+    : menu.filter((m) => m.category_id === activeCategory);
   const lines = linesQuery.data ?? [];
   const sent = lines.filter((l) => l.kitchen_sent_at);
   const unsent = lines.filter((l) => !l.kitchen_sent_at);
@@ -402,7 +420,10 @@ function OrderScreen({
 
   const pendingCounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const id of pending) m.set(id, (m.get(id) ?? 0) + 1);
+    for (const tap of pending) {
+      const { id } = parseTap(tap);
+      m.set(id, (m.get(id) ?? 0) + 1);
+    }
     return m;
   }, [pending]);
 
@@ -438,48 +459,102 @@ function OrderScreen({
         </div>
       </header>
 
-      {/* Menu */}
-      <nav className="sticky top-[69px] z-10 mt-2 flex gap-2 overflow-x-auto bg-background px-4 py-2">
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setCategory(c.id)}
-            className={[
-              "h-11 shrink-0 rounded-full border px-4 font-semibold",
-              c.id === activeCategory
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card",
-            ].join(" ")}
-          >
-            {c.name}
-          </button>
-        ))}
-      </nav>
-      <div className="grid grid-cols-2 gap-3 px-4 pt-2">
-        {menu
-          .filter((m) => m.category_id === activeCategory)
-          .map((m) => {
-            const inOrder =
-              (unsent.find((l) => l.menu_item_id === m.id)?.quantity ?? 0) +
-              (pendingCounts.get(m.id) ?? 0);
-            return (
+      {/* Menu: search, then category chips */}
+      <div className="sticky top-[69px] z-10 mt-2 space-y-2 bg-background px-4 py-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Find a dish"
+            aria-label="Find a dish"
+            className="h-11 w-full rounded-full border border-border bg-card pl-10 pr-10 text-base outline-none focus:border-primary"
+          />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground"
+            >
+              <X className="size-5" />
+            </button>
+          )}
+        </div>
+        {!searchWords.length && (
+          <nav className="flex gap-2 overflow-x-auto">
+            {categories.map((c) => (
               <button
-                key={m.id}
+                key={c.id}
                 type="button"
-                onClick={() => addItem.mutate(m.id)}
-                className="relative flex min-h-24 flex-col justify-between rounded-xl border border-border bg-card p-3 text-left shadow-sm active:scale-[0.97] active:bg-primary/10"
+                onClick={() => setCategory(c.id)}
+                className={[
+                  "h-11 shrink-0 rounded-full border px-4 font-semibold",
+                  c.id === activeCategory
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card",
+                ].join(" ")}
               >
-                <span className="font-semibold leading-tight">{m.name}</span>
-                <span className="text-sm text-muted-foreground">{inr(m.price)}</span>
-                {inOrder > 0 && (
-                  <span className="absolute -top-2 -right-2 flex size-7 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                    {inOrder}
-                  </span>
-                )}
+                {c.name}
               </button>
-            );
-          })}
+            ))}
+          </nav>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3 px-4 pt-2">
+        {shownMenu.map((m) => {
+          const inOrder =
+            unsent.filter((l) => l.menu_item_id === m.id).reduce((n, l) => n + l.quantity, 0) +
+            (pendingCounts.get(m.id) ?? 0);
+          const badge = inOrder > 0 && (
+            <span className="absolute -top-2 -right-2 flex size-7 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+              {inOrder}
+            </span>
+          );
+          return m.half_price == null ? (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => addItem.mutate({ id: m.id, portion: "full" })}
+              className="relative flex min-h-24 flex-col justify-between rounded-xl border border-border bg-card p-3 text-left shadow-sm active:scale-[0.97] active:bg-primary/10"
+            >
+              <span className="font-semibold leading-tight">{m.name}</span>
+              <span className="text-sm text-muted-foreground">{inr(m.price)}</span>
+              {badge}
+            </button>
+          ) : (
+            // Sold in two sizes: tap Full or Half.
+            <div
+              key={m.id}
+              className="relative flex min-h-24 flex-col justify-between gap-2 rounded-xl border border-border bg-card p-2 shadow-sm"
+            >
+              <span className="px-1 font-semibold leading-tight">{m.name}</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["full", "half"] as const).map((portion) => (
+                  <button
+                    key={portion}
+                    type="button"
+                    onClick={() => addItem.mutate({ id: m.id, portion })}
+                    className="rounded-lg border border-border px-1.5 py-1.5 text-left active:scale-[0.97] active:bg-primary/10"
+                  >
+                    <span className="block text-[11px] font-bold uppercase text-muted-foreground">
+                      {portion}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {inr(portion === "half" ? m.half_price! : m.price)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {badge}
+            </div>
+          );
+        })}
+        {searchWords.length > 0 && shownMenu.length === 0 && (
+          <p className="col-span-2 py-6 text-center text-muted-foreground">
+            No dish matches "{search}".
+          </p>
+        )}
       </div>
 
       {/* Current order — below the menu so dishes never move under the waiter's finger as items are added */}

@@ -73,6 +73,9 @@ export interface IngredientInput {
 }
 
 const PAYMENT_METHODS = ["CASH", "UPI", "CARD"];
+/** A half plate uses this share of the dish's recipe (recipes are for a full plate). */
+export const HALF_PORTION = 0.6;
+export type Portion = "full" | "half";
 const MOVEMENT_TYPES = ["used", "received", "count"];
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -342,13 +345,14 @@ export class Store {
     orderId: string,
     item: { id: string | null; name: string; price: number; tax_rate: number },
     quantity: number,
+    portion: Portion = "full",
   ) {
     const line = this.get<{ id: string }>(
       `SELECT id FROM order_items
        WHERE order_id = $o AND menu_item_id IS $m AND item_name = $name AND unit_price = $p AND tax_rate = $t
-         AND kitchen_sent_at IS NULL
+         AND portion = $portion AND kitchen_sent_at IS NULL
        LIMIT 1`,
-      { o: orderId, m: item.id, name: item.name, p: item.price, t: item.tax_rate },
+      { o: orderId, m: item.id, name: item.name, p: item.price, t: item.tax_rate, portion },
     );
     if (line) {
       this.run("UPDATE order_items SET quantity = quantity + $q WHERE id = $id", {
@@ -358,8 +362,8 @@ export class Store {
       return;
     }
     this.run(
-      `INSERT INTO order_items (id, order_id, menu_item_id, item_name, unit_price, tax_rate, quantity, created_at)
-       VALUES ($id, $o, $m, $name, $p, $t, $q, $at)`,
+      `INSERT INTO order_items (id, order_id, menu_item_id, item_name, unit_price, tax_rate, quantity, created_at, portion)
+       VALUES ($id, $o, $m, $name, $p, $t, $q, $at, $portion)`,
       {
         id: uuid(),
         o: orderId,
@@ -369,25 +373,38 @@ export class Store {
         t: item.tax_rate,
         q: quantity,
         at: now(),
+        portion,
       },
     );
   }
 
-  addItem(orderId: string, menuItemId: string) {
+  /** Adds one full or half plate of a dish. A half plate is billed at the dish's half price and
+   *  named "Dish (Half)" on the bill and KOT. */
+  addItem(orderId: string, menuItemId: string, portion: Portion = "full") {
+    if (portion !== "full" && portion !== "half") throw new AppError("Pick full or half");
     this.tx(() => {
       this.openOrderOrThrow(orderId);
       const item = this.get<{
         id: string;
         name: string;
         price: number;
+        half_price: number | null;
         tax_rate: number;
         is_active: number;
-      }>("SELECT id, name, price, tax_rate, is_active FROM menu_items WHERE id = $id", {
+      }>("SELECT id, name, price, half_price, tax_rate, is_active FROM menu_items WHERE id = $id", {
         id: menuItemId,
       });
       if (!item) throw new AppError("Menu item not found", 404);
       if (!item.is_active) throw new AppError(`${item.name} is not available right now`);
-      this.addToUnsentLine(orderId, item, 1);
+      if (portion === "half") {
+        if (item.half_price == null) throw new AppError(`${item.name} has no half plate`);
+        this.addToUnsentLine(
+          orderId,
+          { ...item, name: `${item.name} (Half)`, price: item.half_price },
+          1,
+          "half",
+        );
+      } else this.addToUnsentLine(orderId, item, 1);
     });
   }
 
@@ -417,6 +434,7 @@ export class Store {
             tax_rate: line.tax_rate as number,
           },
           quantity - line.quantity,
+          line.portion === "half" ? "half" : "full",
         );
       } else {
         this.run("UPDATE order_items SET quantity = $q WHERE id = $id", {
@@ -563,13 +581,14 @@ export class Store {
       portions: number;
     }>(
       `SELECT r.inventory_item_id, r.quantity AS recipe_qty, r.unit AS recipe_unit,
-              inv.unit AS stock_unit, SUM(i.quantity) AS portions
+              inv.unit AS stock_unit,
+              SUM(i.quantity * CASE WHEN i.portion = 'half' THEN $half ELSE 1 END) AS portions
        FROM order_items i
        JOIN menu_item_ingredients r ON r.menu_item_id = i.menu_item_id
        JOIN inventory_items inv ON inv.id = r.inventory_item_id AND inv.is_active = 1
        WHERE i.order_id = $o
        GROUP BY r.id`,
-      { o: orderId },
+      { o: orderId, half: HALF_PORTION },
     );
     const needed = new Map<string, number>();
     for (const r of rows) {
@@ -753,7 +772,7 @@ export class Store {
 
   menuItems(activeOnly: boolean) {
     const rows = this.all<Row>(
-      `SELECT id, name, price, tax_rate, is_active, category_id FROM menu_items
+      `SELECT id, name, price, half_price, tax_rate, is_active, category_id FROM menu_items
        ${activeOnly ? "WHERE is_active = 1" : ""} ORDER BY name`,
     );
     return rows.map((r) => bool(r, "is_active"));
@@ -810,6 +829,8 @@ export class Store {
       price: number;
       tax_rate: number;
       is_active: boolean;
+      /** Price of a half plate; null = no half plate. Left out = unchanged. */
+      half_price: number | string | null;
       /** When given, replaces the dish's recipe. */
       ingredients: IngredientInput[];
     }>,
@@ -826,25 +847,31 @@ export class Store {
       throw new AppError("Pick a category");
     if (!(price >= 0)) throw new AppError("Price must be zero or more");
     if (!(tax >= 0)) throw new AppError("GST rate must be zero or more");
+    const rawHalf =
+      input.half_price === undefined ? (existing?.half_price ?? null) : input.half_price;
+    const halfPrice = rawHalf === null || rawHalf === "" ? null : Number(rawHalf);
+    if (halfPrice !== null && !(halfPrice >= 0))
+      throw new AppError("Half price must be zero or more");
     const params = {
       id: id ?? uuid(),
       cat: categoryId,
       name,
       price,
       tax,
+      half: halfPrice,
       active: active ? 1 : 0,
       at: now(),
     };
     return this.tx(() => {
       if (existing) {
         this.run(
-          "UPDATE menu_items SET category_id = $cat, name = $name, price = $price, tax_rate = $tax, is_active = $active, updated_at = $at WHERE id = $id",
+          "UPDATE menu_items SET category_id = $cat, name = $name, price = $price, half_price = $half, tax_rate = $tax, is_active = $active, updated_at = $at WHERE id = $id",
           params,
         );
       } else {
         this.run(
-          `INSERT INTO menu_items (id, category_id, name, price, tax_rate, is_active, created_at, updated_at)
-           VALUES ($id, $cat, $name, $price, $tax, $active, $at, $at)`,
+          `INSERT INTO menu_items (id, category_id, name, price, half_price, tax_rate, is_active, created_at, updated_at)
+           VALUES ($id, $cat, $name, $price, $half, $tax, $active, $at, $at)`,
           params,
         );
       }
@@ -888,10 +915,12 @@ export class Store {
 
   inventoryItems() {
     return this.all<Row>(
-      `SELECT i.id, i.name, i.unit, i.current_quantity, i.low_stock_level, i.is_active, i.updated_at,
+      `SELECT i.id, i.name, i.unit, i.current_quantity, i.low_stock_level, i.price_per_unit, i.is_active, i.updated_at,
               (SELECT COUNT(*) FROM menu_item_ingredients r WHERE r.inventory_item_id = i.id) AS dish_count,
               -- Price per unit of the latest delivery with an amount paid (prices change day to day).
-              lp.cost / lp.quantity_change AS last_price, lp.created_at AS last_price_at
+              lp.cost / lp.quantity_change AS last_price, lp.created_at AS last_price_at,
+              -- Stock has been entered at least once (a new item at 0 isn't "low", just not counted yet).
+              EXISTS (SELECT 1 FROM inventory_movements m WHERE m.item_id = i.id) AS tracked
        FROM inventory_items i
        LEFT JOIN inventory_movements lp ON lp.id = (
          SELECT m.id FROM inventory_movements m
@@ -900,7 +929,7 @@ export class Store {
          ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1
        )
        ORDER BY i.name`,
-    ).map((r) => bool(r, "is_active"));
+    ).map((r) => bool(r, "is_active", "tracked"));
   }
 
   inventoryMovements(limit = 30) {
@@ -926,6 +955,8 @@ export class Store {
       opening_quantity?: number;
       /** Warn when stock goes below this (in the item's unit). null or "" = no warning. */
       low_stock_level?: number | string | null;
+      /** Current price per unit (per kg / L / piece). null or "" = not known. Left out = unchanged. */
+      price_per_unit?: number | string | null;
     },
   ) {
     const name = (input.name ?? "").trim();
@@ -934,6 +965,10 @@ export class Store {
     const active = input.is_active ?? true;
     const rawLevel = input.low_stock_level;
     const lowLevel = rawLevel == null || rawLevel === "" ? null : Number(rawLevel);
+    const rawPrice = input.price_per_unit;
+    const price = rawPrice == null || rawPrice === "" ? null : Number(rawPrice);
+    if (price != null && !(Number.isFinite(price) && price >= 0))
+      throw new AppError("Price must be zero or more");
     if (lowLevel != null && !(Number.isFinite(lowLevel) && lowLevel >= 0))
       throw new AppError("Minimum stock must be zero or more");
     const clash = this.get<{ id: string }>(
@@ -955,7 +990,8 @@ export class Store {
           );
         const r = this.run(
           `UPDATE inventory_items SET name = $name, unit = $unit, is_active = $a, updated_at = $at,
-             low_stock_level = CASE WHEN $keep THEN low_stock_level ELSE $low END
+             low_stock_level = CASE WHEN $keep THEN low_stock_level ELSE $low END,
+             price_per_unit = CASE WHEN $keepPrice THEN price_per_unit ELSE $price END
            WHERE id = $id`,
           {
             name,
@@ -963,6 +999,8 @@ export class Store {
             a: active ? 1 : 0,
             low: lowLevel,
             keep: rawLevel === undefined ? 1 : 0,
+            price,
+            keepPrice: rawPrice === undefined ? 1 : 0,
             at: now(),
             id,
           },
@@ -973,8 +1011,8 @@ export class Store {
       const newId = uuid();
       const at = now();
       this.run(
-        "INSERT INTO inventory_items (id, name, unit, current_quantity, low_stock_level, is_active, created_at, updated_at) VALUES ($id, $name, $unit, 0, $low, $a, $at, $at)",
-        { id: newId, name, unit, low: lowLevel, a: active ? 1 : 0, at },
+        "INSERT INTO inventory_items (id, name, unit, current_quantity, low_stock_level, price_per_unit, is_active, created_at, updated_at) VALUES ($id, $name, $unit, 0, $low, $price, $a, $at, $at)",
+        { id: newId, name, unit, low: lowLevel, price, a: active ? 1 : 0, at },
       );
       const opening = Number(input.opening_quantity) || 0;
       if (opening < 0) throw new AppError("Starting quantity must be zero or more");
@@ -1032,6 +1070,12 @@ export class Store {
       if (next < 0)
         throw new AppError(`Not enough stock (have ${item.current_quantity} ${item.unit})`);
       this.writeStock(itemId, type, next, item.current_quantity, note, createdBy, null, paid);
+      // Prices change day to day: a priced delivery sets the item's current price per unit.
+      if (type === "received" && paid != null && delta > 0)
+        this.run("UPDATE inventory_items SET price_per_unit = $p WHERE id = $id", {
+          p: Math.round((paid / delta) * 100) / 100,
+          id: itemId,
+        });
       return { current_quantity: next };
     });
   }

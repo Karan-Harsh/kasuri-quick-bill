@@ -81,9 +81,16 @@ function OrderScreen() {
   const menuQuery = useQuery({
     queryKey: ["menu-items", "active"],
     queryFn: () =>
-      api.get<{ id: string; name: string; price: number; tax_rate: number; category_id: string }[]>(
-        "/menu-items?active=1",
-      ),
+      api.get<
+        {
+          id: string;
+          name: string;
+          price: number;
+          half_price: number | null;
+          tax_rate: number;
+          category_id: string;
+        }[]
+      >("/menu-items?active=1"),
   });
 
   const order = orderQuery.data;
@@ -113,13 +120,16 @@ function OrderScreen() {
   };
 
   // The server merges repeat taps into one line and only puts new quantity on unsent lines.
-  async function addLine(menuItem: { id: string }) {
-    await api.post(`/orders/${orderId}/items`, { menu_item_id: menuItem.id });
+  async function addLine(menuItem: { id: string; portion?: "full" | "half" }) {
+    await api.post(`/orders/${orderId}/items`, {
+      menu_item_id: menuItem.id,
+      portion: menuItem.portion ?? "full",
+    });
   }
 
   // Taps are queued so two quick taps on the same item never race.
   const addItem = useMutation({
-    mutationFn: (menuItem: { id: string; name: string; price: number; tax_rate: number }) => {
+    mutationFn: (menuItem: { id: string; portion?: "full" | "half" }) => {
       const next = queueRef.current.then(() => addLine(menuItem));
       queueRef.current = next.catch(() => undefined);
       return next;
@@ -244,7 +254,7 @@ function OrderScreen() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a dish, e.g. paneer chilli half"
+              placeholder="Find a dish, e.g. paneer chilli"
               aria-label="Find a dish"
               className="h-12 pl-10 pr-10 text-base"
             />
@@ -278,28 +288,64 @@ function OrderScreen() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                disabled={isSettled}
-                onClick={() =>
-                  addItem.mutate({
-                    id: item.id,
-                    name: item.name,
-                    price: Number(item.price),
-                    tax_rate: Number(item.tax_rate),
-                  })
-                }
-                className="rounded-xl border-2 border-border bg-card p-4 text-left transition hover:border-primary active:scale-[0.98] disabled:opacity-50"
-              >
-                <p className="text-lg font-semibold leading-tight">{item.name}</p>
-                <p className="mt-2 text-xl font-bold text-primary">{inr(Number(item.price))}</p>
-                {gstEnabled && (
-                  <p className="text-xs text-muted-foreground">GST {Number(item.tax_rate)}%</p>
-                )}
-              </button>
-            ))}
+            {visibleItems.map((item) =>
+              item.half_price == null ? (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={isSettled}
+                  onClick={() => addItem.mutate({ id: item.id })}
+                  className="rounded-xl border-2 border-border bg-card p-4 text-left transition hover:border-primary active:scale-[0.98] disabled:opacity-50"
+                >
+                  <p className="text-lg font-semibold leading-tight">{item.name}</p>
+                  <p className="mt-2 text-xl font-bold text-primary">{inr(Number(item.price))}</p>
+                  {gstEnabled && (
+                    <p className="text-xs text-muted-foreground">GST {Number(item.tax_rate)}%</p>
+                  )}
+                </button>
+              ) : (
+                // Sold in two sizes: tap Full or Half.
+                <div
+                  key={item.id}
+                  className={`rounded-xl border-2 border-border bg-card p-3 ${isSettled ? "opacity-50" : ""}`}
+                >
+                  <p className="px-1 text-lg font-semibold leading-tight">{item.name}</p>
+                  {gstEnabled && (
+                    <p className="px-1 text-xs text-muted-foreground">
+                      GST {Number(item.tax_rate)}%
+                    </p>
+                  )}
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={isSettled}
+                      onClick={() => addItem.mutate({ id: item.id, portion: "full" })}
+                      className="rounded-lg border-2 border-border px-2 py-2 text-left transition hover:border-primary active:scale-[0.98]"
+                    >
+                      <span className="block text-xs font-semibold uppercase text-muted-foreground">
+                        Full
+                      </span>
+                      <span className="text-lg font-bold text-primary">
+                        {inr(Number(item.price))}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSettled}
+                      onClick={() => addItem.mutate({ id: item.id, portion: "half" })}
+                      className="rounded-lg border-2 border-border px-2 py-2 text-left transition hover:border-primary active:scale-[0.98]"
+                    >
+                      <span className="block text-xs font-semibold uppercase text-muted-foreground">
+                        Half
+                      </span>
+                      <span className="text-lg font-bold text-primary">
+                        {inr(Number(item.half_price))}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
             {visibleItems.length === 0 && (
               <p className="text-muted-foreground">
                 {words.length

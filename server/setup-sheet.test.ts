@@ -266,3 +266,73 @@ describe("setup sheet", () => {
     );
   });
 });
+
+describe("half plates and stock prices in the sheet", () => {
+  test("round-trips half prices and stock prices; an empty stock price keeps the current one", () => {
+    const naan = (store.menuItems(false) as { id: string; name: string }[]).find(
+      (m) => m.name === "Butter Naan",
+    )!;
+    store.saveMenuItem(naan.id, { half_price: 25 });
+    store.saveInventoryItem(null, { name: "Onion", unit: "kg", price_per_unit: 35 });
+    const sheets = readXlsx(writeXlsx(buildSetupWorkbook(store)));
+    const menu = sheets.find((s) => s.name === "Menu")!.rows;
+    expect(menu[0]).toEqual([
+      "Category",
+      "Dish",
+      "Price (₹)",
+      "Half price (₹)",
+      "GST %",
+      "Available",
+    ]);
+    expect(menu.find((r) => r[1] === "Butter Naan")).toEqual([
+      "Breads",
+      "Butter Naan",
+      45,
+      25,
+      5,
+      "Yes",
+    ]);
+    const inv = sheets.find((s) => s.name === "Inventory")!.rows;
+    expect(inv[1]).toEqual(["Onion", "kg", 35, 0]);
+
+    const r = importSetupWorkbook(
+      store,
+      book({
+        Inventory: [
+          ["Stock item", "Unit", "Price (₹ per unit)", "Stock now"],
+          ["Onion", "kg", 42.75, null], // new price
+          ["Rice", "kg", null, 10], // new item, no price yet
+        ],
+        Menu: [
+          ["Category", "Dish", "Price (₹)", "Half price (₹)"],
+          ["Breads", "Butter Naan", 45, null], // empty: no half plate any more
+          ["Breads", "Garlic Naan", 60, 35],
+        ],
+      }),
+      true,
+    );
+    expect(r.problems).toEqual([]);
+    const price = (n: string) => store.inventoryItems().find((i) => i.name === n)!.price_per_unit;
+    expect(price("Onion")).toBe(42.75);
+    expect(price("Rice")).toBeNull();
+    const half = (n: string) =>
+      (store.menuItems(false) as { name: string; half_price: number | null }[]).find(
+        (m) => m.name === n,
+      )!.half_price;
+    expect(half("Butter Naan")).toBeNull();
+    expect(half("Garlic Naan")).toBe(35);
+
+    // A sheet with no price column leaves prices alone.
+    importSetupWorkbook(
+      store,
+      book({
+        Inventory: [
+          ["Stock item", "Unit"],
+          ["Onion", "kg"],
+        ],
+      }),
+      true,
+    );
+    expect(price("Onion")).toBe(42.75);
+  });
+});

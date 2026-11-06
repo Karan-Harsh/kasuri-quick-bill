@@ -40,6 +40,10 @@ const COLUMNS = {
   inventory: {
     name: { title: "Stock item", aliases: ["name", "item", "stockitem", "ingredient"] },
     unit: { title: "Unit", aliases: ["unit", "units"] },
+    price: {
+      title: "Price (₹ per unit)",
+      aliases: ["price", "priceperunit", "rate", "unitprice", "cost"],
+    },
     stock: {
       title: "Stock now",
       aliases: ["stocknow", "stock", "currentstock", "quantity", "qty"],
@@ -52,7 +56,8 @@ const COLUMNS = {
   menu: {
     category: { title: "Category", aliases: ["category"] },
     dish: { title: "Dish", aliases: ["dish", "name", "item", "dishname"] },
-    price: { title: "Price (₹)", aliases: ["price", "rate", "mrp"] },
+    price: { title: "Price (₹)", aliases: ["price", "rate", "mrp", "fullprice"] },
+    half: { title: "Half price (₹)", aliases: ["halfprice", "half", "halfplate"] },
     gst: { title: "GST %", aliases: ["gst", "gstrate", "tax", "taxrate"] },
     available: { title: "Available", aliases: ["available", "active"] },
   },
@@ -92,15 +97,21 @@ const HOW_TO = [
   [
     "• Warn below: Kasuri warns when stock goes below this amount (same unit). Leave it empty for no warning.",
   ],
-  ["  Example:  Onion | kg | 100 | 5"],
+  [
+    "• Price (₹ per unit): today's price per kg / L / piece. Leave it empty to keep the price Kasuri has. Recording a delivery with the amount paid also updates it.",
+  ],
+  ["  Example:  Onion | kg | 42.75 | 100 | 5"],
   [""],
   ["Menu sheet — your dishes"],
   ["• Category: a new category name is added automatically."],
   ["• Price (₹): price before GST.  GST %: e.g. 5. Empty = 5% for a new dish."],
   ["• Available: Yes or No. Empty = Yes for a new dish."],
-  ["  Example:  Main Course | Veg Biryani | 220 | 5 | Yes"],
+  [
+    "• Half price (₹): price of a half plate. Empty = no half plate. When ordering, Half or Full is picked; a half plate uses 60% of the recipe.",
+  ],
+  ["  Example:  Biryani | Veg Biryani | 170 | 100 | 5 | Yes"],
   [""],
-  ["Recipes sheet — what one portion of a dish uses"],
+  ["Recipes sheet — what one FULL plate of a dish uses"],
   [
     "• One row per ingredient. A dish with 3 ingredients has 3 rows (copy the dish name onto each).",
   ],
@@ -132,6 +143,7 @@ export function buildSetupWorkbook(store: Store): Sheet[] {
       id: string;
       name: string;
       price: number;
+      half_price: number | null;
       tax_rate: number;
       is_active: boolean;
       category_id: string;
@@ -147,6 +159,7 @@ export function buildSetupWorkbook(store: Store): Sheet[] {
     unit: string;
     current_quantity: number;
     low_stock_level: number | null;
+    price_per_unit: number | null;
   }[];
   const recipes = (
     store.menuIngredients() as {
@@ -174,21 +187,28 @@ export function buildSetupWorkbook(store: Store): Sheet[] {
     },
     {
       name: SHEETS.inventory,
-      widths: [28, 10, 12, 12],
+      widths: [28, 10, 18, 12, 12],
       rows: [
         titles(COLUMNS.inventory),
-        ...stock.map((i) => [i.name, i.unit, Number(i.current_quantity), i.low_stock_level]),
+        ...stock.map((i) => [
+          i.name,
+          i.unit,
+          i.price_per_unit,
+          Number(i.current_quantity),
+          i.low_stock_level,
+        ]),
       ],
     },
     {
       name: SHEETS.menu,
-      widths: [20, 32, 12, 8, 11],
+      widths: [24, 32, 12, 15, 8, 11],
       rows: [
         titles(COLUMNS.menu),
         ...dishes.map((d) => [
           catName.get(d.category_id) ?? "",
           d.name,
           Number(d.price),
+          d.half_price,
           Number(d.tax_rate),
           yesNo(d.is_active),
         ]),
@@ -270,7 +290,9 @@ function readTable<K extends string>(
   const rows = sheet.rows
     .map((cells, i) => ({
       row: i + 1,
-      get: (k: K) => (index[k] >= 0 ? cells[index[k]] : undefined),
+      // undefined = no such column in the sheet; null = the column is there but the cell is empty
+      // (Excel leaves out empty cells at the end of a row).
+      get: (k: K) => (index[k] >= 0 ? (cells[index[k]] ?? null) : undefined),
       blank: cells.every((c) => str(c) === ""),
     }))
     .filter((r, i) => i > headerIndex && !r.blank)
@@ -353,6 +375,8 @@ function runImport(
         if (stock != null && !(stock >= 0)) fail('"Stock now" must be a number, zero or more');
         const warn = num(r.get("warn"));
         if (warn != null && !(warn >= 0)) fail('"Warn below" must be a number, zero or more');
+        const price = num(r.get("price"));
+        if (price != null && !(price >= 0)) fail("Price must be a number, zero or more");
 
         const existing = store.inventoryItems().find((i) => key(String(i.name)) === key(name)) as
           | {
@@ -361,6 +385,7 @@ function runImport(
               unit: string;
               current_quantity: number;
               low_stock_level: number | null;
+              price_per_unit: number | null;
               is_active: boolean;
             }
           | undefined;
@@ -371,6 +396,7 @@ function runImport(
             unit: unit!,
             opening_quantity: stock ?? 0,
             low_stock_level: warn,
+            price_per_unit: price,
           });
           result.inventory.added++;
           return;
@@ -379,6 +405,7 @@ function runImport(
         const changed =
           existing.unit !== nextUnit ||
           (existing.low_stock_level ?? null) !== warn ||
+          (price != null && Number(existing.price_per_unit) !== price) ||
           (stock != null && Number(existing.current_quantity) !== stock);
         if (!changed) {
           result.inventory.unchanged++;
@@ -389,6 +416,7 @@ function runImport(
           unit: nextUnit,
           is_active: existing.is_active,
           low_stock_level: warn,
+          ...(price != null ? { price_per_unit: price } : {}),
         });
         if (stock != null && Number(existing.current_quantity) !== stock)
           store.recordMovement(existing.id, "count", stock, "Excel upload");
@@ -414,6 +442,7 @@ function runImport(
             id: string;
             name: string;
             price: number;
+            half_price: number | null;
             tax_rate: number;
             is_active: boolean;
             category_id: string;
@@ -442,6 +471,9 @@ function runImport(
         if (gst != null && !(gst >= 0 && gst <= 100)) fail("GST % must be a number from 0 to 100");
         const available = yes(r.get("available"));
         if (available === "bad") fail('Available must be "Yes" or "No"');
+        const halfCell = r.get("half");
+        const half = num(halfCell);
+        if (half != null && !(half >= 0)) fail("Half price must be a number, zero or more");
 
         const next = {
           // Matched ignoring capitals; keep the spelling already in Kasuri.
@@ -450,6 +482,8 @@ function runImport(
           price: price ?? Number(existing!.price),
           tax_rate: gst ?? (existing ? Number(existing.tax_rate) : 5),
           is_active: (available as boolean | null) ?? existing?.is_active ?? true,
+          // No "Half price" column at all: keep what Kasuri has. An empty cell: no half plate.
+          half_price: halfCell === undefined ? (existing?.half_price ?? null) : half,
         };
         if (
           existing &&
@@ -457,7 +491,8 @@ function runImport(
           existing.category_id === next.category_id &&
           Number(existing.price) === next.price &&
           Number(existing.tax_rate) === next.tax_rate &&
-          existing.is_active === next.is_active
+          existing.is_active === next.is_active &&
+          (existing.half_price ?? null) === next.half_price
         ) {
           result.menu.unchanged++;
           return;

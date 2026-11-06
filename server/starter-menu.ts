@@ -1,7 +1,7 @@
 // Kasuri Family Restaurant's menu (from "Kasuri Family Restaurant Food menu update-1.pdf").
 // New databases start with it, and "Load starter menu" adds it. Prices are before GST.
-// [dish, half price or null, full price]: a dish sold in two sizes becomes two dishes,
-// "Name (Half)" and "Name (Full)"; a dish with one price keeps its plain name.
+// [dish, half price or null, full price]: a dish sold in two sizes is one dish with a half price;
+// the cashier or waiter picks Half or Full when ordering.
 // Not included: Cold Drink (sold at M.R.P., so it has no fixed price).
 
 export type StarterDish = [name: string, half: number | null, full: number];
@@ -348,16 +348,9 @@ export const DEMO_MENU: { category: string; dishes: StarterDish[] }[] = [
 /** GST rates of demo dishes that weren't 5%. */
 export const DEMO_TAX: Record<string, number> = { "Fresh Lime Soda": 18, "Cold Coffee": 18 };
 
-/** Every dish of a menu as it appears in the app: name, category and price. */
+/** Every dish of a menu as it appears in the app: name, category, price and half price. */
 export function flattenMenu(menu: { category: string; dishes: StarterDish[] }[]) {
   return menu.flatMap(({ category, dishes }) =>
-    dishes.flatMap(([name, half, full]) =>
-      half == null
-        ? [{ category, name, price: full }]
-        : [
-            { category, name: `${name} (Half)`, price: half },
-            { category, name: `${name} (Full)`, price: full },
-          ],
-    ),
+    dishes.map(([name, half, full]) => ({ category, name, price: full, half_price: half })),
   );
 }

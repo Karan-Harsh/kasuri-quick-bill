@@ -8,6 +8,10 @@ export interface InventoryItem {
   unit: string;
   current_quantity: number;
   low_stock_level: number | null;
+  /** Stock has been entered at least once (until then it isn't counted as low). */
+  tracked: boolean;
+  /** Current price per unit (per kg / L / piece); a priced delivery updates it. */
+  price_per_unit: number | null;
   /** Price per unit paid on the latest delivery with an amount entered, and when. */
   last_price: number | null;
   last_price_at: string | null;

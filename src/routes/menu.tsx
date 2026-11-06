@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { FileSpreadsheet, Pencil, Plus, Trash2, X } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { AppHeader } from "@/components/AppHeader";
@@ -44,6 +44,8 @@ interface ItemForm {
   name: string;
   category_id: string;
   price: string;
+  /** Half plate price; "" = no half plate. */
+  half_price: string;
   tax_rate: string;
   is_active: boolean;
   /** What one portion uses from stock. */
@@ -63,6 +65,7 @@ const emptyForm = (categoryId: string): ItemForm => ({
   name: "",
   category_id: categoryId,
   price: "",
+  half_price: "",
   tax_rate: "5",
   is_active: true,
   ingredients: [],
@@ -72,6 +75,8 @@ function MenuPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ItemForm | null>(null);
   const [newCategory, setNewCategory] = useState("");
+  /** Finds dishes by name across every category. */
+  const [search, setSearch] = useState("");
 
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
@@ -86,6 +91,7 @@ function MenuPage() {
           id: string;
           name: string;
           price: number;
+          half_price: number | null;
           tax_rate: number;
           is_active: boolean;
           category_id: string;
@@ -122,6 +128,7 @@ function MenuPage() {
         name: input.name.trim(),
         category_id: input.category_id,
         price: Number(input.price) || 0,
+        half_price: input.half_price.trim() === "" ? null : Number(input.half_price),
         tax_rate: Number(input.tax_rate) || 0,
         is_active: input.is_active,
         ingredients: input.ingredients
@@ -178,6 +185,9 @@ function MenuPage() {
 
   const categories = categoriesQuery.data ?? [];
   const items = itemsQuery.data ?? [];
+  const searchWords = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = (item: { name: string }) =>
+    searchWords.every((w) => item.name.toLowerCase().includes(w));
   const recipes = ingredientsQuery.data ?? [];
   const recipeOf = (menuItemId: string) => recipes.filter((r) => r.menu_item_id === menuItemId);
   const stockById = new Map(stockItems.map((item) => [item.id, item]));
@@ -240,8 +250,36 @@ function MenuPage() {
           </Button>
         </Card>
 
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Find a dish"
+            aria-label="Find a dish"
+            className="h-12 pl-10 pr-10 text-base"
+          />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+            >
+              <X className="size-5" />
+            </button>
+          )}
+        </div>
+        {searchWords.length > 0 && !items.some(matches) && (
+          <p className="text-muted-foreground">No dish matches "{search}".</p>
+        )}
+
         {categories.map((category) => {
-          const catItems = items.filter((item) => item.category_id === category.id);
+          const catItems = items.filter(
+            (item) => item.category_id === category.id && matches(item),
+          );
+          // While searching, show only the categories with a match.
+          if (searchWords.length && catItems.length === 0) return null;
           return (
             <section key={category.id} className="space-y-3">
               <h2 className="text-xl font-bold">{category.name}</h2>
@@ -255,7 +293,9 @@ function MenuPage() {
                       <div>
                         <p className="text-lg font-semibold leading-tight">{item.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {inr(Number(item.price))} · GST {Number(item.tax_rate)}%
+                          {inr(Number(item.price))}
+                          {item.half_price != null && ` · Half ${inr(Number(item.half_price))}`} ·
+                          GST {Number(item.tax_rate)}%
                         </p>
                         {recipeOf(item.id).length > 0 && (
                           <p className="mt-1 text-xs text-muted-foreground">
@@ -279,6 +319,8 @@ function MenuPage() {
                               name: item.name,
                               category_id: item.category_id,
                               price: String(Number(item.price)),
+                              half_price:
+                                item.half_price == null ? "" : String(Number(item.half_price)),
                               tax_rate: String(Number(item.tax_rate)),
                               is_active: item.is_active,
                               ingredients: recipeOf(item.id).map((r) => ({
@@ -357,7 +399,7 @@ function MenuPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="price">Price (₹)</Label>
                   <Input
@@ -367,6 +409,19 @@ function MenuPage() {
                     step="1"
                     value={form.price}
                     onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="halfPrice">Half price (₹)</Label>
+                  <Input
+                    id="halfPrice"
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={form.half_price}
+                    onChange={(e) => setForm({ ...form, half_price: e.target.value })}
+                    placeholder="No half"
                     className="h-11"
                   />
                 </div>
@@ -392,9 +447,9 @@ function MenuPage() {
               </div>
 
               <div className="space-y-2 border-t border-border pt-4">
-                <Label>Ingredients for one portion</Label>
+                <Label>Ingredients for one full plate</Label>
                 <p className="text-sm text-muted-foreground">
-                  Taken out of inventory each time this dish is billed.
+                  Taken out of inventory each time this dish is billed. A half plate uses 60%.
                 </p>
                 {form.ingredients.map((line, index) => {
                   const stock = stockById.get(line.inventory_item_id);

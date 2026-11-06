@@ -48,6 +48,8 @@ interface ItemForm {
   current_quantity: string;
   /** Warn below this amount. Empty = no warning. */
   low_stock_level: string;
+  /** Current price per unit. Empty = not known. */
+  price_per_unit: string;
   is_active: boolean;
 }
 
@@ -66,6 +68,7 @@ const emptyForm = (): ItemForm => ({
   unit: "kg",
   current_quantity: "0",
   low_stock_level: "",
+  price_per_unit: "",
   is_active: true,
 });
 
@@ -134,6 +137,7 @@ function InventoryPage() {
         unit: input.unit,
         is_active: input.is_active,
         low_stock_level: low === "" ? null : Number(low),
+        price_per_unit: input.price_per_unit.trim() === "" ? null : Number(input.price_per_unit),
       };
       if (input.id) await api.put(`/inventory/items/${input.id}`, payload);
       else await api.post("/inventory/items", { ...payload, opening_quantity: qty });
@@ -261,13 +265,17 @@ function InventoryPage() {
                     <p className="text-xs text-muted-foreground">
                       Updated {new Date(item.updated_at).toLocaleString("en-IN")}
                     </p>
-                    {item.last_price != null && item.last_price_at && (
+                    {item.price_per_unit != null && (
                       <p className="text-xs text-muted-foreground">
-                        Last bought at {inr(Number(item.last_price))}/{item.unit} on{" "}
-                        {new Date(item.last_price_at).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                        })}
+                        Price {inr(Number(item.price_per_unit))}/{item.unit}
+                        {item.last_price_at &&
+                          ` · last bought ${new Date(item.last_price_at).toLocaleDateString(
+                            "en-IN",
+                            {
+                              day: "numeric",
+                              month: "short",
+                            },
+                          )}`}
                       </p>
                     )}
                   </div>
@@ -283,6 +291,8 @@ function InventoryPage() {
                         current_quantity: String(Number(item.current_quantity)),
                         low_stock_level:
                           item.low_stock_level == null ? "" : String(Number(item.low_stock_level)),
+                        price_per_unit:
+                          item.price_per_unit == null ? "" : String(Number(item.price_per_unit)),
                         is_active: item.is_active,
                       })
                     }
@@ -303,7 +313,8 @@ function InventoryPage() {
                           unit: item.unit,
                           currentQuantity: Number(item.current_quantity),
                           type,
-                          lastPrice: item.last_price == null ? null : Number(item.last_price),
+                          lastPrice:
+                            item.price_per_unit == null ? null : Number(item.price_per_unit),
                         });
                         setMovementQty(
                           type === "count" ? String(Number(item.current_quantity)) : "",
@@ -467,6 +478,23 @@ function InventoryPage() {
                     disabled={Boolean(form.id)}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invPrice">Price per {form.unit} (₹)</Label>
+                <Input
+                  id="invPrice"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  value={form.price_per_unit}
+                  onChange={(e) => setForm({ ...form, price_per_unit: e.target.value })}
+                  placeholder="e.g. 42.75"
+                  className="h-11"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Changes day to day: recording a delivery with the amount paid updates it.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="invLow">Warn when stock goes below ({form.unit})</Label>
